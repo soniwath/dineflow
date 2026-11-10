@@ -3,6 +3,7 @@ import { db } from "@/lib/db/index";
 import { menuItems, menuInventoryItems } from "@/lib/db/schema";
 import { isAuthenticated } from "@/lib/auth/jwt";
 import { eq, sql } from "drizzle-orm";
+import { saveImage } from "@/lib/save-image";
 
 export async function GET() {
   try {
@@ -52,10 +53,19 @@ export async function POST(request: Request) {
       );
     }
 
-    const body = await request.json();
-    const { name, price, image, desc, category, ingredients } = body;
+    const formData = await request.formData();
 
-    const imageUrl = image && image.trim() !== "" ? image : null;
+    const file = formData.get("image") as File | null;
+    formData.delete("image");
+
+    const body = Object.fromEntries(formData.entries());
+    const { name, price, desc, category, ingredients } = body;
+
+    // Handle image upload if a file is provided
+    let imageUrl = null;
+    if (file instanceof File && file.size > 0) {
+      imageUrl = await saveImage(file);
+    }
 
     const resultItem = await db.transaction(async (tx) => {
       // 1. Insert the new menu item
@@ -117,10 +127,17 @@ export async function PUT(request: Request) {
       );
     }
 
-    const body = await request.json();
-    const { id, name, price, image, desc, category, ingredients } = body;
+    const formData = await request.formData();
+    const file = formData.get("image") as File | null;
+    formData.delete("image");
 
-    const imageUrl = image && image.trim() !== "" ? image : null;
+    const body = Object.fromEntries(formData.entries());
+    const { id, name, price, desc, category, ingredients } = body;
+
+    let imageUrl = null;
+    if (file instanceof File && file.size > 0) {
+      imageUrl = await saveImage(file);
+    }
 
     const resultItem = await db.transaction(async (tx) => {
       // 1. Update the existing menu item

@@ -39,7 +39,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List, Plus, Search, Trash2, Loader2 } from "lucide-react";
+import {
+  LayoutGrid,
+  List,
+  Plus,
+  Search,
+  Trash2,
+  Loader2,
+  Pencil,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -47,6 +55,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 export default function InventoryView() {
   const {
@@ -85,6 +101,30 @@ export default function InventoryView() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState<InventoryItem | null>(null);
 
+  // Inventory Detail States
+  const [itemDetailId, setItemDetailId] = useState<string | null>(null);
+  const [itemDetailOpen, setItemDetailOpen] = useState(false);
+  // Derived from the store so the sheet stays fresh after an edit
+  const itemDetail = useMemo(
+    () => items.find((i) => i.id === itemDetailId) ?? null,
+    [items, itemDetailId],
+  );
+  // Menu items whose recipe uses this ingredient
+  const usedInMenu = useMemo(
+    () =>
+      itemDetail
+        ? menuItems.filter((m) =>
+            m.ingredients?.some((r) => r.inventoryItemId === itemDetail.id),
+          )
+        : [],
+    [menuItems, itemDetail],
+  );
+
+  const openItemDetail = (item: InventoryItem) => {
+    setItemDetailId(item.id);
+    setItemDetailOpen(true);
+  };
+
   // Supplier Dialog States
   const [supplierFormOpen, setSupplierFormOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -104,12 +144,18 @@ export default function InventoryView() {
   const [menuCategory, setMenuCategory] = useState("Starters");
   const [menuDesc, setMenuDesc] = useState("");
   const [menuImage, setMenuImage] = useState<File | null>(null);
+  const [menuError, setMenuError] = useState<string | null>(null);
   const [recipeIngredients, setRecipeIngredients] = useState<
     MenuInventoryItem[]
   >([]);
-
   const [menuDeleteOpen, setMenuDeleteOpen] = useState(false);
   const [deletingMenu, setDeletingMenu] = useState<MenuItem | null>(null);
+
+  // Preview URL derived from the File, revoked automatically on change/unmount
+  const preview = useMemo(
+    () => (menuImage ? URL.createObjectURL(menuImage) : null),
+    [menuImage],
+  );
 
   const availableCategories = ["Starters", "Mains", "Desserts", "Beverages"];
   const PAGE_SIZE = 10;
@@ -132,6 +178,9 @@ export default function InventoryView() {
     out: "bg-red-500",
   };
 
+  const MAX_SIZE_B = 5 * 1024 * 1024;
+  const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
   const loading = isInventoryLoading;
 
   const qtyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
@@ -142,11 +191,13 @@ export default function InventoryView() {
     setFormKey((k) => k + 1);
     setFormOpen(true);
   };
+
   const openEdit = (item: InventoryItem) => {
     setEditing(item);
     setFormKey((k) => k + 1);
     setFormOpen(true);
   };
+
   const openDelete = (item: InventoryItem) => {
     setDeleting(item);
     setDeleteOpen(true);
@@ -159,6 +210,7 @@ export default function InventoryView() {
     setSupplierEmailInput("");
     setSupplierFormOpen(true);
   };
+
   const openEditSupplier = (s: Supplier) => {
     setEditingSupplier(s);
     setSupplierNameInput(s.name);
@@ -166,6 +218,7 @@ export default function InventoryView() {
     setSupplierEmailInput(s.email);
     setSupplierFormOpen(true);
   };
+
   const openDeleteSupplier = (s: Supplier) => {
     setDeletingSupplier(s);
     setSupplierDeleteOpen(true);
@@ -189,6 +242,7 @@ export default function InventoryView() {
     setMenuDesc(m.desc ?? "");
     setRecipeIngredients(m.ingredients ?? []);
     setMenuFormOpen(true);
+    setMenuImage(null); // Reset image to null when editing, as we don't have the file object
   };
 
   const openDeleteMenu = (m: MenuItem) => {
@@ -230,7 +284,7 @@ export default function InventoryView() {
     setSupplierDeleteOpen(false);
   }
 
-  function handleSaveMenu(e: React.FormEvent) {
+  function handleSaveMenu(e: any) {
     e.preventDefault();
     const itemData: MenuItem = {
       id: editingMenu ? editingMenu.id : "",
@@ -239,6 +293,7 @@ export default function InventoryView() {
       category: menuCategory as MenuItem["category"],
       desc: menuDesc,
       ingredients: recipeIngredients,
+      image: menuImage,
     };
 
     if (editingMenu) {
@@ -247,6 +302,7 @@ export default function InventoryView() {
       addMenuItem(itemData);
     }
     setMenuFormOpen(false);
+    handleRemoveImage(); // Remove the image from state after saving
   }
 
   function confirmDeleteMenu() {
@@ -324,6 +380,37 @@ export default function InventoryView() {
     setSupplierFilter([]);
     setPage(1);
   }
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (!ACCEPTED_TYPES.includes(file.type)) {
+      setMenuError("Please upload a JPG, PNG, or WebP image.");
+    } else if (file.size > MAX_SIZE_B) {
+      setMenuError(
+        `Image must be smaller than ${MAX_SIZE_B / (1024 * 1024)}MB.`,
+      );
+    } else {
+      setMenuError(null);
+      setMenuImage(file);
+    }
+
+    // Allows re-selecting the same file after removing it
+    input.value = "";
+  };
+
+  const handleRemoveImage = () => {
+    setMenuImage(null);
+    setMenuError(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
 
   useEffect(() => {
     loadData();
@@ -517,11 +604,7 @@ export default function InventoryView() {
                   <TableRow>
                     <TableHead>Ingredient</TableHead>
                     <TableHead>On hand</TableHead>
-                    <TableHead>Par</TableHead>
-                    <TableHead>Low-stock at</TableHead>
-                    <TableHead>Expires</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Supplier</TableHead>
                     <TableHead className="w-24">
                       <span className="sr-only">Actions</span>
                     </TableHead>
@@ -529,7 +612,16 @@ export default function InventoryView() {
                 </TableHeader>
                 <TableBody>
                   {pageRows.map((item) => (
-                    <TableRow key={item.id}>
+                    <TableRow
+                      key={item.id}
+                      className="cursor-pointer"
+                      tabIndex={0}
+                      onClick={() => openItemDetail(item)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && e.target === e.currentTarget)
+                          openItemDetail(item);
+                      }}
+                    >
                       <TableCell className="font-medium">{item.name}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -543,15 +635,6 @@ export default function InventoryView() {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="tabular-nums">
-                        {qty(item.par, item.unit)}
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        {qty(item.lowAt, item.unit)}
-                      </TableCell>
-                      <TableCell>
-                        <ExpiryCellComponent iso={item.expires} />
-                      </TableCell>
                       <TableCell>
                         <StatusBadgeComponent
                           statusLabel={STATUS_LABEL}
@@ -559,8 +642,7 @@ export default function InventoryView() {
                           status={getStatus(item)}
                         />
                       </TableCell>
-                      <TableCell>{supplierName[item.supplierId]}</TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <RowActionsComponent
                           item={item}
                           onEdit={openEdit}
@@ -580,6 +662,7 @@ export default function InventoryView() {
                   <article
                     key={item.id}
                     className="flex flex-col gap-4 rounded-xl border bg-card p-4"
+                    onClick={() => openItemDetail(item)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -628,7 +711,10 @@ export default function InventoryView() {
                       </div>
                     </dl>
 
-                    <div className="mt-auto border-t pt-3">
+                    <div
+                      className="mt-auto border-t pt-3"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <RowActionsComponent
                         item={item}
                         onEdit={openEdit}
@@ -900,7 +986,7 @@ export default function InventoryView() {
                         </p>
                       </div>
                       <span className="text-base font-semibold tabular-nums">
-                        {money.format(m.price)}
+                        {money.format(m.price / 100)}
                       </span>
                     </div>
 
@@ -908,7 +994,7 @@ export default function InventoryView() {
                       <p className="text-xs font-medium text-muted-foreground">
                         Recipe Ingredients
                       </p>
-                      <div className="flex flex-wrap gap-1 min-h-[36px]">
+                      <div className="flex flex-wrap gap-1 min-h-9">
                         {m.ingredients && m.ingredients.length > 0 ? (
                           m.ingredients.map((ing, idx) => {
                             const itemObj = items.find(
@@ -1139,23 +1225,31 @@ export default function InventoryView() {
               </div>
             </div>
 
-            {/* <div className="space-y-1"> */}
-            {/*   <label className="text-xs font-medium">Menu Image</label> */}
-            {/*   <Input */}
-            {/*     type="file" */}
-            {/*     accept="image/*" */}
-            {/*     onChange={(e) => { */}
-            {/*       const file = e.target.files?.[0]; */}
-            {/*       if (file) { */}
-            {/*         const reader = new FileReader(); */}
-            {/*         reader.onloadend = () => { */}
-            {/*           setMenuImage(reader.result as string); */}
-            {/*         }; */}
-            {/*         reader.readAsDataURL(file); */}
-            {/*       } */}
-            {/*     }} */}
-            {/*   /> */}
-            {/* </div> */}
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Menu Image</label>
+              <Input
+                type="file"
+                accept={ACCEPTED_TYPES.join(",")}
+                onChange={handleImageChange}
+              />
+
+              {preview && (
+                <div className="relative">
+                  <img
+                    src={preview}
+                    alt="Menu item preview"
+                    className="h-40 w-40 rounded object-cover"
+                  />
+                  <Button
+                    className="cursor-pointer"
+                    variant="destructive"
+                    onClick={handleRemoveImage}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              )}
+            </div>
 
             <div className="space-y-2 border-t pt-4">
               <div className="flex items-center justify-between">
@@ -1291,6 +1385,119 @@ export default function InventoryView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Item detail sheet */}
+      <Sheet open={itemDetailOpen} onOpenChange={setItemDetailOpen}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+          {itemDetail && (
+            <>
+              <SheetHeader className="border-b pb-4">
+                <SheetTitle>{itemDetail.name}</SheetTitle>
+                <SheetDescription>
+                  {supplierName[itemDetail.supplierId] ?? "No supplier"}
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="space-y-6 px-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-semibold tabular-nums">
+                      {qty(itemDetail.onHand, itemDetail.unit)}
+                    </span>
+                    <StatusBadgeComponent
+                      statusLabel={STATUS_LABEL}
+                      statusBadge={statusBadge}
+                      status={getStatus(itemDetail)}
+                    />
+                  </div>
+                  <StockBarComponent statusBar={statusBar} item={itemDetail} />
+                  <p className="text-xs text-muted-foreground">
+                    of {qty(itemDetail.par, itemDetail.unit)} par
+                  </p>
+                </div>
+
+                <dl className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Par level</dt>
+                    <dd className="tabular-nums">
+                      {qty(itemDetail.par, itemDetail.unit)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">
+                      Low-stock at
+                    </dt>
+                    <dd className="tabular-nums">
+                      {qty(itemDetail.lowAt, itemDetail.unit)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Expires</dt>
+                    <dd>
+                      <ExpiryCellComponent iso={itemDetail.expires} />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-muted-foreground">Unit</dt>
+                    <dd>{itemDetail.unit}</dd>
+                  </div>
+                </dl>
+
+                <div className="space-y-2 border-t pt-4">
+                  <h4 className="text-sm font-medium">Used in menu items</h4>
+                  {usedInMenu.length === 0 ? (
+                    <p className="text-xs italic text-muted-foreground">
+                      Not used in any recipe.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {usedInMenu.map((m) => {
+                        const r = m.ingredients?.find(
+                          (x) => x.inventoryItemId === itemDetail.id,
+                        );
+                        return (
+                          <Badge
+                            key={m.id}
+                            variant="outline"
+                            className="text-xs"
+                          >
+                            {m.name}: {r?.quantityRequired} {itemDetail.unit}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <SheetFooter className="flex-row border-t pt-4">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setItemDetailOpen(false);
+                    openEdit(itemDetail);
+                  }}
+                >
+                  <Pencil className="size-4" />
+                  Edit
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={() => {
+                    setItemDetailOpen(false);
+                    openDelete(itemDetail);
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                  Remove
+                </Button>
+              </SheetFooter>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

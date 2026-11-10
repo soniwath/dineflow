@@ -8,22 +8,48 @@ export async function getMenuItemsApi(): Promise<MenuItem[]> {
 }
 
 export async function saveMenuItemApi(item: MenuItem): Promise<MenuItem> {
+  const formData = new FormData();
+
+  // Append each property of the item to the FormData object
+  Object.entries(item).forEach(([key, value]) => {
+    if (value instanceof File || value instanceof Blob) {
+      formData.append(key, value);
+    } else if (Array.isArray(value)) {
+      formData.append(key, JSON.stringify(value));
+    } else if (value !== null && value !== undefined) {
+      formData.append(key, String(value));
+    }
+  });
+
   const res = await fetch("/api/menu-items", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(item),
+    body: formData,
   });
+
   const data = await res.json();
   if (!res.ok) throw new Error(data.message ?? "Failed to save menu item");
   return data.item;
 }
 
 export async function updateMenuItemApi(item: MenuItem): Promise<MenuItem> {
+  const formData = new FormData();
+
+  // Append each property of the item to the FormData object
+  Object.entries(item).forEach(([key, value]) => {
+    if (value instanceof File || value instanceof Blob) {
+      formData.append(key, value);
+    } else if (Array.isArray(value)) {
+      formData.append(key, JSON.stringify(value));
+    } else if (value !== null && value !== undefined) {
+      formData.append(key, String(value));
+    }
+  });
+
   const res = await fetch(`/api/menu-items`, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(item),
+    body: formData,
   });
+
   const data = await res.json();
   if (!res.ok) throw new Error(data.message ?? "Failed to update menu item");
   return data.item;
