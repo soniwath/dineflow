@@ -87,6 +87,12 @@ export default function InventoryView() {
     [suppliers],
   );
 
+  // constants
+  const MAX_SIZE_B = 5 * 1024 * 1024;
+  const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+  const PAGE_SIZE = 10;
+  const availableCategories = ["Starters", "Mains", "Desserts", "Beverages"];
+
   const [tab, setTab] = useState("items");
   const [view, setView] = useState<"list" | "card">("list");
   const [query, setQuery] = useState("");
@@ -125,67 +131,6 @@ export default function InventoryView() {
     setItemDetailOpen(true);
   };
 
-  // Supplier Dialog States
-  const [supplierFormOpen, setSupplierFormOpen] = useState(false);
-  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [supplierNameInput, setSupplierNameInput] = useState("");
-  const [supplierPhoneInput, setSupplierPhoneInput] = useState("");
-  const [supplierEmailInput, setSupplierEmailInput] = useState("");
-  const [supplierDeleteOpen, setSupplierDeleteOpen] = useState(false);
-  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(
-    null,
-  );
-
-  // Menu Item Dialog States
-  const [menuFormOpen, setMenuFormOpen] = useState(false);
-  const [editingMenu, setEditingMenu] = useState<MenuItem | null>(null);
-  const [menuName, setMenuName] = useState("");
-  const [menuPrice, setMenuPrice] = useState("");
-  const [menuCategory, setMenuCategory] = useState("Starters");
-  const [menuDesc, setMenuDesc] = useState("");
-  const [menuImage, setMenuImage] = useState<File | null>(null);
-  const [menuError, setMenuError] = useState<string | null>(null);
-  const [recipeIngredients, setRecipeIngredients] = useState<
-    MenuInventoryItem[]
-  >([]);
-  const [menuDeleteOpen, setMenuDeleteOpen] = useState(false);
-  const [deletingMenu, setDeletingMenu] = useState<MenuItem | null>(null);
-
-  // Preview URL derived from the File, revoked automatically on change/unmount
-  const preview = useMemo(
-    () => (menuImage ? URL.createObjectURL(menuImage) : null),
-    [menuImage],
-  );
-
-  const availableCategories = ["Starters", "Mains", "Desserts", "Beverages"];
-  const PAGE_SIZE = 10;
-
-  const statusBadge: Record<StockStatus, string> = {
-    "at-par": "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-    low: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
-    out: "bg-red-500/15 text-red-700 dark:text-red-400",
-  };
-
-  const statusBar: Record<StockStatus, string> = {
-    "at-par": "bg-emerald-500",
-    low: "bg-amber-500",
-    out: "bg-transparent",
-  };
-
-  const statusDot: Record<StockStatus, string> = {
-    "at-par": "bg-emerald-500",
-    low: "bg-amber-500",
-    out: "bg-red-500",
-  };
-
-  const MAX_SIZE_B = 5 * 1024 * 1024;
-  const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-
-  const loading = isInventoryLoading;
-
-  const qtyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
-  const qty = (n: number, unit: string) => `${qtyFmt.format(n)} ${unit}`;
-
   const openAdd = () => {
     setEditing(null);
     setFormKey((k) => k + 1);
@@ -202,6 +147,28 @@ export default function InventoryView() {
     setDeleting(item);
     setDeleteOpen(true);
   };
+
+  function handleSave(input: ItemInput) {
+    if (editing) updateItem(editing.id, input);
+    else addItem(input);
+    setFormOpen(false);
+  }
+
+  function confirmDelete() {
+    if (deleting) removeItem(deleting.id);
+    setDeleteOpen(false);
+  }
+
+  // Supplier Dialog States
+  const [supplierFormOpen, setSupplierFormOpen] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [supplierNameInput, setSupplierNameInput] = useState("");
+  const [supplierPhoneInput, setSupplierPhoneInput] = useState("");
+  const [supplierEmailInput, setSupplierEmailInput] = useState("");
+  const [supplierDeleteOpen, setSupplierDeleteOpen] = useState(false);
+  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(
+    null,
+  );
 
   const openAddSupplier = () => {
     setEditingSupplier(null);
@@ -223,6 +190,49 @@ export default function InventoryView() {
     setDeletingSupplier(s);
     setSupplierDeleteOpen(true);
   };
+
+  function handleSaveSupplier(e: React.FormEvent) {
+    e.preventDefault();
+    if (editingSupplier) {
+      updateSupplier(editingSupplier.id, {
+        name: supplierNameInput,
+        phone: supplierPhoneInput,
+        email: supplierEmailInput,
+      });
+    } else {
+      addSupplier({
+        name: supplierNameInput,
+        phone: supplierPhoneInput,
+        email: supplierEmailInput,
+      });
+    }
+    setSupplierFormOpen(false);
+  }
+
+  function confirmDeleteSupplier() {
+    if (deletingSupplier) removeSupplier(deletingSupplier.id);
+    setSupplierDeleteOpen(false);
+  }
+
+  // Menu Item Dialog States
+  const [menuFormOpen, setMenuFormOpen] = useState(false);
+  const [editingMenu, setEditingMenu] = useState<MenuItem | null>(null);
+  const [menuName, setMenuName] = useState("");
+  const [menuPrice, setMenuPrice] = useState("");
+  const [menuCategory, setMenuCategory] = useState("Starters");
+  const [menuDesc, setMenuDesc] = useState("");
+  const [menuImage, setMenuImage] = useState<File | null>(null);
+  const [recipeIngredients, setRecipeIngredients] = useState<
+    MenuInventoryItem[]
+  >([]);
+  const [menuDeleteOpen, setMenuDeleteOpen] = useState(false);
+  const [deletingMenu, setDeletingMenu] = useState<MenuItem | null>(null);
+
+  // Preview URL derived from the File, revoked automatically on change/unmount
+  const preview = useMemo(
+    () => (menuImage ? URL.createObjectURL(menuImage) : null),
+    [menuImage],
+  );
 
   const openAddMenu = () => {
     setEditingMenu(null);
@@ -250,40 +260,6 @@ export default function InventoryView() {
     setMenuDeleteOpen(true);
   };
 
-  function handleSave(input: ItemInput) {
-    if (editing) updateItem(editing.id, input);
-    else addItem(input);
-    setFormOpen(false);
-  }
-
-  function confirmDelete() {
-    if (deleting) removeItem(deleting.id);
-    setDeleteOpen(false);
-  }
-
-  function handleSaveSupplier(e: React.FormEvent) {
-    e.preventDefault();
-    if (editingSupplier) {
-      updateSupplier(editingSupplier.id, {
-        name: supplierNameInput,
-        phone: supplierPhoneInput,
-        email: supplierEmailInput,
-      });
-    } else {
-      addSupplier({
-        name: supplierNameInput,
-        phone: supplierPhoneInput,
-        email: supplierEmailInput,
-      });
-    }
-    setSupplierFormOpen(false);
-  }
-
-  function confirmDeleteSupplier() {
-    if (deletingSupplier) removeSupplier(deletingSupplier.id);
-    setSupplierDeleteOpen(false);
-  }
-
   function handleSaveMenu(e: any) {
     e.preventDefault();
     const itemData: MenuItem = {
@@ -310,7 +286,30 @@ export default function InventoryView() {
     setMenuDeleteOpen(false);
   }
 
-  const belowPar = items.filter((i) => getStatus(i) !== "at-par").length;
+  // Loading state
+  const loading = isInventoryLoading;
+
+  // helpers
+  const qtyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+  const qty = (n: number, unit: string) => `${qtyFmt.format(n)} ${unit}`;
+
+  const statusBadge: Record<StockStatus, string> = {
+    "at-par": "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
+    low: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+    out: "bg-red-500/15 text-red-700 dark:text-red-400",
+  };
+
+  const statusBar: Record<StockStatus, string> = {
+    "at-par": "bg-emerald-500",
+    low: "bg-amber-500",
+    out: "bg-transparent",
+  };
+
+  const statusDot: Record<StockStatus, string> = {
+    "at-par": "bg-emerald-500",
+    low: "bg-amber-500",
+    out: "bg-red-500",
+  };
 
   const statusOptions: FilterOption[] = (
     ["at-par", "low", "out"] as StockStatus[]
@@ -320,6 +319,8 @@ export default function InventoryView() {
     dot: statusDot[s],
     count: items.filter((i) => getStatus(i) === s).length,
   }));
+
+  const belowPar = items.filter((i) => getStatus(i) !== "at-par").length;
 
   const supplierOptions: FilterOption[] = suppliers.map((s) => ({
     value: s.id,
@@ -387,13 +388,10 @@ export default function InventoryView() {
     if (!file) return;
 
     if (!ACCEPTED_TYPES.includes(file.type)) {
-      setMenuError("Please upload a JPG, PNG, or WebP image.");
+      console.error("Unsupported file type");
     } else if (file.size > MAX_SIZE_B) {
-      setMenuError(
-        `Image must be smaller than ${MAX_SIZE_B / (1024 * 1024)}MB.`,
-      );
+      console.error("File size exceeds 5MB");
     } else {
-      setMenuError(null);
       setMenuImage(file);
     }
 
@@ -403,9 +401,9 @@ export default function InventoryView() {
 
   const handleRemoveImage = () => {
     setMenuImage(null);
-    setMenuError(null);
   };
 
+  // side effects
   useEffect(() => {
     return () => {
       if (preview) URL.revokeObjectURL(preview);
@@ -535,7 +533,7 @@ export default function InventoryView() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="rounded-full bg-red-500/15 text-red-700 hover:bg-red-500/25 dark:text-red-400"
+                  className="rounded-full bg-red-500/15 text-red-700 hover:bg-red-500/25"
                   onClick={() => {
                     setStatusFilter(["low", "out"]);
                     setPage(1);
@@ -1020,7 +1018,7 @@ export default function InventoryView() {
                     </div>
 
                     <div className="mt-auto border-t pt-3 flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                      <span className="text-xs text-muted-foreground truncate max-w-37.5">
                         {m.desc || "No description"}
                       </span>
                       <RowActionsComponent
