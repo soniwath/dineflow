@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   FilterOption,
@@ -45,11 +45,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List, Plus, Search } from "lucide-react";
+import { LayoutGrid, List, Plus, Search, Loader2 } from "lucide-react";
 
 export default function UserManagementView() {
   const { users, loading, loadData, addUser, updateUserRecord, removeUser } =
     useUsersStore();
+
+  const isFirstRender = useRef(true);
 
   const [tab, setTab] = useState("users");
   const [view, setView] = useState<"list" | "card">("list");
@@ -73,8 +75,6 @@ export default function UserManagementView() {
       role: roleFilter.length > 0 ? roleFilter.join(",") : undefined,
     };
   }, [query, statusFilter, roleFilter]);
-
-  let searchDebounce: any = null;
 
   const PAGE_SIZE = 10;
 
@@ -218,27 +218,23 @@ export default function UserManagementView() {
     setPage(1);
   };
 
+  // side effects
   useEffect(() => {
-    // Clear the previous timeout if user types again within 300ms
-    if (searchDebounce) {
-      clearTimeout(searchDebounce);
-    }
-
-    searchDebounce = setTimeout(() => {
+    const timer = setTimeout(() => {
       loadData(params);
     }, 300);
 
-    // Cleanup timeout on unmount or when query changes
-    return () => {
-      if (searchDebounce) {
-        clearTimeout(searchDebounce);
-      }
-    };
-  }, [query]);
+    return () => clearTimeout(timer);
+  }, [query, statusFilter, roleFilter]);
 
-  useEffect(() => {
-    loadData(params);
-  }, [statusFilter, roleFilter]);
+  if (loading) {
+    return (
+      <div className="flex h-96 items-center justify-center gap-2 text-muted-foreground">
+        <Loader2 className="size-5 animate-spin" />
+        <span>Loading users...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -307,6 +303,7 @@ export default function UserManagementView() {
                 setPage(1);
               }}
             />
+
             <FilterPopoverComponent
               title="Role"
               options={roleOptions}
@@ -365,11 +362,7 @@ export default function UserManagementView() {
             </div>
           </div>
 
-          {loading ? (
-            <div className="rounded-xl border p-6 text-sm text-muted-foreground">
-              Loading users...
-            </div>
-          ) : rows.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-10 text-center">
               <div className="space-y-1">
                 <p className="text-sm font-medium">
@@ -652,6 +645,7 @@ export default function UserManagementView() {
         </TabsContent>
       </Tabs>
 
+      {/* Create or edit user dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader className="border-b pb-4">
@@ -674,6 +668,7 @@ export default function UserManagementView() {
         </DialogContent>
       </Dialog>
 
+      {/* Delete user dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>

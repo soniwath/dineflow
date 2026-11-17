@@ -1,4 +1,5 @@
 "use client";
+
 import {
   createContext,
   useCallback,
@@ -17,7 +18,7 @@ import {
 import { getUsers, createUser, updateUser, deleteUser } from "@/lib/api/users";
 
 /* ------------------------------------------------------------------ */
-/* Types & Helpers                                                     */
+/* Types & Helpers                                                    */
 /* ------------------------------------------------------------------ */
 export const STATUS_LABEL: Record<UserStatus, string> = {
   active: "Active",
@@ -60,14 +61,14 @@ export function getInitials(name: string) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Context                                                             */
+/* Context                                                            */
 /* ------------------------------------------------------------------ */
 type UserContextValue = {
   users: User[];
   loading: boolean;
   loadData: (params?: any) => Promise<void>;
   addUser: (input: CreateUserBody) => Promise<User>;
-  updateUserRecord: (id: string, input: UpdateUserBody) => Promise<void>;
+  updateUserRecord: (id: string, input: UpdateUserBody) => Promise<User>;
   removeUser: (id: string) => Promise<void>;
 };
 
@@ -89,68 +90,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const addUser = useCallback(
-    async (input: CreateUserBody) => {
-      const tempId = `temp-${Date.now()}`;
-      const optimistic: User = {
-        id: tempId,
-        name: input.name,
-        email: input.email,
-        role: input.role as UserRole,
-        isActive: input.isActive ?? true,
-        lastLoginAt: "—",
-        updatedAt: new Date().toISOString().slice(0, 10),
-        createdAt: new Date().toISOString().slice(0, 10),
-      };
-
-      // Optimistic update
-      setUsers((prev) => [...prev, optimistic]);
-
-      try {
-        const saved = await createUser(input);
-        setUsers((prev) => prev.map((u) => (u.id === tempId ? saved : u)));
-        return saved;
-      } catch (error) {
-        console.error("Failed to add user:", error);
-        loadData();
-        throw error;
-      }
-    },
-    [loadData],
-  );
+  const addUser = useCallback(async (input: CreateUserBody): Promise<User> => {
+    const saved = await createUser(input);
+    setUsers((prev) => [...prev, saved]);
+    return saved;
+  }, []);
 
   const updateUserRecord = useCallback(
-    async (id: string, input: UpdateUserBody) => {
-      // Optimistic update
-      setUsers((prev) =>
-        prev.map((u) => (u.id === id ? { ...u, ...input } : u)),
-      );
-
-      try {
-        const saved = await updateUser(id, input);
-        setUsers((prev) => prev.map((u) => (u.id === id ? saved : u)));
-      } catch (error) {
-        console.error("Failed to update user:", error);
-        loadData();
-      }
+    async (id: string, input: UpdateUserBody): Promise<User> => {
+      const updated = await updateUser(id, input);
+      setUsers((prev) => prev.map((u) => (u.id === id ? updated : u)));
+      return updated;
     },
-    [loadData],
+    [],
   );
 
-  const removeUser = useCallback(
-    async (id: string) => {
-      // Optimistic update
-      setUsers((prev) => prev.filter((u) => u.id !== id));
-
-      try {
-        await deleteUser(id);
-      } catch (error) {
-        console.error("Failed to delete user:", error);
-        loadData();
-      }
-    },
-    [loadData],
-  );
+  const removeUser = useCallback(async (id: string): Promise<void> => {
+    await deleteUser(id);
+    setUsers((prev) => prev.filter((u) => u.id !== id));
+  }, []);
 
   const value = useMemo(
     () => ({

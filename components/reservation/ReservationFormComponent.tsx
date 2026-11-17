@@ -6,7 +6,7 @@ import {
   ReservationInput,
 } from "@/types/Reservation";
 
-import FieldComponent from "@/components/reservation/FieldComponent";
+import FieldComponent from "@/components/FieldComponent";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";

@@ -64,7 +64,7 @@ export async function updateUser(id: string, input: UpdateUserBody) {
 export async function deleteUser(id: string) {
   const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
   if (!res.ok)
-    throw new Error((await res.json()).error ?? "Failed to delete user");
+    throw new Error((await res.json()).message ?? "Failed to delete user");
   return res.json();
 }
 
@@ -74,7 +74,7 @@ export async function login(input: Credentials) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Failed to login");
+  if (!res.ok) throw new Error((await res.json()).message ?? "Failed to login");
   return res.json();
 }
 

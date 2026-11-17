@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "@/styles/globals.css";
 import { ThemeProvider } from "next-themes";
 import { AppProvider } from "@/stores/AppStore";
+import CsrfFetchPatch from "@/components/CsrfFetchPatch";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
     >
       <body>
+        <CsrfFetchPatch />
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <AppProvider>
             <main className="flex-1 p-4">{children}</main>

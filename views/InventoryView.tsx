@@ -8,9 +8,10 @@ import {
   StockStatus,
   FilterOption,
 } from "@/types/Inventory";
-import { Supplier } from "@/types/Supplier";
+import { Supplier, SupplierErrors } from "@/types/Supplier";
 import { MenuItem, MenuInventoryItem } from "@/types/Menu";
 import { STATUS_LABEL, getStatus, useInventory } from "@/stores/InventoryStore";
+import { createSupplierSchema } from "@/lib/validation/supplier";
 
 import StockBarComponent from "@/components/inventory/StockBarComponent";
 import ExpiryCellComponent from "@/components/inventory/ExpiryCellComponent";
@@ -18,6 +19,7 @@ import RowActionsComponent from "@/components/inventory/RowActionsComponent";
 import FilterPopoverComponent from "@/components/inventory/FilterPopoverComponent";
 import StatusBadgeComponent from "@/components/StatusBadgeComponent";
 import ItemFormComponent from "@/components/inventory/ItemFormComponent";
+import FieldComponent from "@/components/FieldComponent";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -162,6 +164,7 @@ export default function InventoryView() {
   // Supplier Dialog States
   const [supplierFormOpen, setSupplierFormOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [supplierErrors, setSupplierErrors] = useState<SupplierErrors>({});
   const [supplierNameInput, setSupplierNameInput] = useState("");
   const [supplierPhoneInput, setSupplierPhoneInput] = useState("");
   const [supplierEmailInput, setSupplierEmailInput] = useState("");
@@ -193,19 +196,29 @@ export default function InventoryView() {
 
   function handleSaveSupplier(e: React.FormEvent) {
     e.preventDefault();
-    if (editingSupplier) {
-      updateSupplier(editingSupplier.id, {
-        name: supplierNameInput,
-        phone: supplierPhoneInput,
-        email: supplierEmailInput,
-      });
-    } else {
-      addSupplier({
-        name: supplierNameInput,
-        phone: supplierPhoneInput,
-        email: supplierEmailInput,
-      });
+    const result = createSupplierSchema().safeParse({
+      name: supplierNameInput,
+      phone: supplierPhoneInput,
+      email: supplierEmailInput,
+    });
+
+    if (!result.success) {
+      const next: SupplierErrors = {};
+      for (const issue of result.error.issues) {
+        const key = issue.path[0] as keyof SupplierErrors;
+        next[key] ??= issue.message; // keep the first error per field
+      }
+      setSupplierErrors(next);
+      return;
     }
+
+    setSupplierErrors({});
+    if (editingSupplier) {
+      updateSupplier(editingSupplier.id, result.data);
+    } else {
+      addSupplier(result.data);
+    }
+
     setSupplierFormOpen(false);
   }
 
@@ -653,7 +666,7 @@ export default function InventoryView() {
               </Table>
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {pageRows.map((item) => {
                 const status = getStatus(item);
                 return (
@@ -788,7 +801,7 @@ export default function InventoryView() {
               </Button>
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {suppliers.map((s) => {
                 const theirs = items.filter((i) => i.supplierId === s.id);
                 const low = theirs.filter(
@@ -967,7 +980,7 @@ export default function InventoryView() {
               </Table>
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {menuItems.map((m) => {
                 return (
                   <article
@@ -1092,34 +1105,43 @@ export default function InventoryView() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveSupplier} className="space-y-4 pt-2">
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Supplier Name</label>
+            <FieldComponent
+              id="supplierName"
+              label="Supplier Name"
+              error={supplierErrors.name}
+            >
               <Input
                 value={supplierNameInput}
                 onChange={(e) => setSupplierNameInput(e.target.value)}
                 placeholder="e.g. Sysco Foods"
-                required
+                aria-invalid={!!supplierErrors.name}
               />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Supplier Phone</label>
+            </FieldComponent>
+            <FieldComponent
+              id="supplierPhone"
+              label="Supplier Phone"
+              error={supplierErrors.phone}
+            >
               <Input
                 value={supplierPhoneInput}
                 onChange={(e) => setSupplierPhoneInput(e.target.value)}
                 placeholder="e.g. Sysco Foods"
-                required
+                aria-invalid={!!supplierErrors.phone}
               />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Supplier Email</label>
+            </FieldComponent>
+            <FieldComponent
+              id="supplierEmail"
+              label="Supplier Email"
+              error={supplierErrors.email}
+            >
               <Input
                 type="email"
                 value={supplierEmailInput}
                 onChange={(e) => setSupplierEmailInput(e.target.value)}
                 placeholder="e.g. Sysco Foods"
-                required
+                aria-invalid={!!supplierErrors.email}
               />
-            </div>
+            </FieldComponent>
             <DialogFooter className="pt-4 border-t">
               <DialogClose render={<Button type="button" variant="outline" />}>
                 Cancel

@@ -5,8 +5,30 @@ import { eq, and } from "drizzle-orm";
 const bcrypt = require("bcrypt");
 import { cookies } from "next/headers";
 import { signToken } from "@/lib/auth/jwt";
+import { RateLimiterMemory } from "rate-limiter-flexible";
+
+const loginLimiter = new RateLimiterMemory({
+  points: 5, // 5 attempts
+  duration: 60 * 15, // per 15 minutes
+});
 
 export async function POST(request: Request) {
+  if (process.env.RATE_LIMITING_ENABLED) {
+    try {
+      await loginLimiter.consume(
+        request.headers.get("x-forwarded-for") || "127.0.0.1",
+      );
+    } catch {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Too many login attempts. Please try again later.",
+        },
+        { status: 429 },
+      );
+    }
+  }
+
   try {
     const body = await request.json();
     const { email, password } = body;
