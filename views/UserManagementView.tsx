@@ -1,13 +1,14 @@
 "use client";
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   FilterOption,
   UserRole,
   UserStatus,
-  CreateUserBody,
-  UpdateUserBody,
   User,
+  UpdateUserBody,
+  CreateUserBody,
+  UserErrors,
 } from "@/types/User";
 import {
   useUsersStore,
@@ -18,6 +19,7 @@ import {
   AVATAR_COLORS,
   getInitials,
 } from "@/stores/UserStore";
+import { createUserSchema } from "@/lib/validation/user";
 
 import FilterPopoverComponent from "@/components/user/FilterPopoverComponent";
 import UserActionsComponent from "@/components/user/UserActionsComponent";
@@ -51,8 +53,6 @@ export default function UserManagementView() {
   const { users, loading, loadData, addUser, updateUserRecord, removeUser } =
     useUsersStore();
 
-  const isFirstRender = useRef(true);
-
   const [tab, setTab] = useState("users");
   const [view, setView] = useState<"list" | "card">("list");
   const [query, setQuery] = useState("");
@@ -60,6 +60,7 @@ export default function UserManagementView() {
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
   const [page, setPage] = useState(1);
 
+  const [userErrors, setUserErrors] = useState<UserErrors>({});
   const [formOpen, setFormOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [editing, setEditing] = useState<User | null>(null);
@@ -158,31 +159,52 @@ export default function UserManagementView() {
     email: string;
     role: UserRole;
     status: UserStatus;
+    phone: string;
     password?: string;
   }) => {
     try {
       setSaving(true);
       setError(null);
 
+      const result = createUserSchema().safeParse(input);
+
+      if (!result.success) {
+        const next: UserErrors = {};
+        for (const issue of result.error.issues) {
+          const key = issue.path[0] as keyof UserErrors;
+          next[key] ??= issue.message; // keep the first error per field
+        }
+
+        setUserErrors(next);
+        return;
+      }
+
+      setUserErrors({});
+
       if (editing) {
         const payload: UpdateUserBody = {
-          name: input.name,
-          email: input.email,
-          role: input.role as any,
-          isActive: input.status === "active",
-          ...(input.password?.trim()
-            ? { password: input.password.trim() }
-            : {}),
-        } as any;
+          name: result.data.name,
+          email: result.data.email,
+          phone: result.data.phone,
+          role: result.data.role,
+          isActive: result.data.isActive,
+        };
+
+        if (result.data.password) {
+          payload.password = result.data.password;
+        }
+
         await updateUserRecord(editing.id, payload);
       } else {
         const payload: CreateUserBody = {
-          name: input.name,
-          email: input.email,
-          role: input.role as any,
-          isActive: input.status === "active",
-          password: input.password?.trim(),
-        } as any;
+          name: result.data.name,
+          email: result.data.email,
+          role: result.data.role,
+          phone: result.data.phone,
+          isActive: result.data.isActive,
+          password: result.data.password ?? "",
+        };
+
         await addUser(payload);
       }
 
@@ -664,6 +686,7 @@ export default function UserManagementView() {
             user={editing}
             onSubmit={handleSubmit}
             saving={saving}
+            errors={userErrors}
           />
         </DialogContent>
       </Dialog>

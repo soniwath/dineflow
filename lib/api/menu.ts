@@ -45,6 +45,11 @@ export async function updateMenuItemApi(item: MenuItem): Promise<MenuItem> {
     }
   });
 
+  // Convert price (float with 2 decimal places) to string with cents
+  if (item.price !== undefined) {
+    formData.set("price", (item.price * 100).toFixed(0));
+  }
+
   const res = await fetch(`/api/menu-items`, {
     method: "PUT",
     body: formData,

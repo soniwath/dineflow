@@ -9,9 +9,10 @@ import {
   FilterOption,
 } from "@/types/Inventory";
 import { Supplier, SupplierErrors } from "@/types/Supplier";
-import { MenuItem, MenuInventoryItem } from "@/types/Menu";
+import { MenuItem, MenuErrors, MenuInventoryItem } from "@/types/Menu";
 import { STATUS_LABEL, getStatus, useInventory } from "@/stores/InventoryStore";
 import { createSupplierSchema } from "@/lib/validation/supplier";
+import { createMenuSchema } from "@/lib/validation/menu";
 
 import StockBarComponent from "@/components/inventory/StockBarComponent";
 import ExpiryCellComponent from "@/components/inventory/ExpiryCellComponent";
@@ -41,6 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import {
   LayoutGrid,
   List,
@@ -230,6 +232,7 @@ export default function InventoryView() {
   // Menu Item Dialog States
   const [menuFormOpen, setMenuFormOpen] = useState(false);
   const [editingMenu, setEditingMenu] = useState<MenuItem | null>(null);
+  const [menuErrors, setMenuErrors] = useState<MenuErrors>({});
   const [menuName, setMenuName] = useState("");
   const [menuPrice, setMenuPrice] = useState("");
   const [menuCategory, setMenuCategory] = useState("Starters");
@@ -275,20 +278,32 @@ export default function InventoryView() {
 
   function handleSaveMenu(e: any) {
     e.preventDefault();
-    const itemData: MenuItem = {
-      id: editingMenu ? editingMenu.id : "",
+    const result = createMenuSchema().safeParse({
       name: menuName,
-      price: Math.round(parseFloat(menuPrice || "0") * 100),
-      category: menuCategory as MenuItem["category"],
+      price: parseFloat(menuPrice || "0"),
+      category: menuCategory,
+      image: menuImage,
       desc: menuDesc,
       ingredients: recipeIngredients,
-      image: menuImage,
-    };
+    });
+
+    if (!result.success) {
+      const next: MenuErrors = {};
+      for (const issue of result.error.issues) {
+        const key = issue.path.join(",") as keyof MenuErrors;
+        next[key] ??= issue.message; // keep the first error per field
+      }
+
+      setMenuErrors(next);
+      return;
+    }
+
+    setMenuErrors({});
 
     if (editingMenu) {
-      updateMenuItem(editingMenu.id, itemData);
+      updateMenuItem(editingMenu.id, { id: editingMenu.id, ...result.data });
     } else {
-      addMenuItem(itemData);
+      addMenuItem({ id: "", ...result.data });
     }
     setMenuFormOpen(false);
     handleRemoveImage(); // Remove the image from state after saving
@@ -1192,65 +1207,78 @@ export default function InventoryView() {
 
           <form onSubmit={handleSaveMenu} className="space-y-4 pt-2">
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Dish Name</label>
+              <FieldComponent
+                id="menuName"
+                label="Dish Name"
+                error={menuErrors.name}
+              >
                 <Input
                   value={menuName}
                   onChange={(e) => setMenuName(e.target.value)}
                   placeholder="e.g. Truffle Pasta"
-                  required
+                  aria-invalid={!!menuErrors.name}
                 />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Price ($)</label>
+              </FieldComponent>
+              <FieldComponent
+                id="menuPrice"
+                error={menuErrors.price}
+                label="Price ($)"
+              >
                 <Input
                   type="number"
-                  step="0.01"
+                  step="1.00"
                   value={menuPrice}
                   onChange={(e) => setMenuPrice(e.target.value)}
                   placeholder="14.99"
-                  required
+                  aria-invalid={!!menuErrors.price}
                 />
-              </div>
+              </FieldComponent>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Category</label>
-                <Select
-                  value={menuCategory}
-                  onValueChange={(value) =>
-                    setMenuCategory(value ?? "Starters")
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableCategories.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium">Description</label>
-                <Input
-                  value={menuDesc}
-                  onChange={(e) => setMenuDesc(e.target.value)}
-                  placeholder="Brief description"
-                />
-              </div>
-            </div>
+            <FieldComponent
+              id="menuCategory"
+              error={menuErrors.category}
+              label="Category"
+            >
+              <Select
+                value={menuCategory}
+                onValueChange={(value) => setMenuCategory(value ?? "Starters")}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCategories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldComponent>
 
-            <div className="space-y-1">
-              <label className="text-xs font-medium">Menu Image</label>
+            <FieldComponent
+              id="menuDesc"
+              error={menuErrors.desc}
+              label="Description"
+            >
+              <Textarea
+                value={menuDesc}
+                onChange={(e) => setMenuDesc(e.target.value)}
+                placeholder="Brief description"
+              />
+            </FieldComponent>
+
+            <FieldComponent
+              id="menuImage"
+              error={menuErrors.image}
+              label="Menu Image"
+            >
               <Input
                 type="file"
                 accept={ACCEPTED_TYPES.join(",")}
                 onChange={handleImageChange}
+                aria-invalid={!!menuErrors.image}
               />
 
               {preview && (
@@ -1269,7 +1297,7 @@ export default function InventoryView() {
                   </Button>
                 </div>
               )}
-            </div>
+            </FieldComponent>
 
             <div className="space-y-2 border-t pt-4">
               <div className="flex items-center justify-between">
@@ -1305,68 +1333,79 @@ export default function InventoryView() {
                     const selectedInvItem = items.find(
                       (i) => i.id === rec.inventoryItemId,
                     );
+                    const invError =
+                      menuErrors[`ingredients,${index},inventoryItemId`];
+                    const qtyError =
+                      menuErrors[`ingredients,${index},quantityRequired`];
+
                     return (
-                      <div
+                      <FieldComponent
+                        id={`recipeIngredients-${index}`}
+                        label=""
                         key={index}
-                        className="flex items-center gap-2 bg-muted/30 p-2 rounded-md border"
+                        error={invError ?? qtyError}
                       >
-                        <select
-                          className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
-                          value={rec.inventoryItemId}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setRecipeIngredients((prev) =>
-                              prev.map((item, idx) =>
-                                idx === index
-                                  ? { ...item, inventoryItemId: val }
-                                  : item,
-                              ),
-                            );
-                          }}
-                        >
-                          {items.map((inv) => (
-                            <option key={inv.id} value={inv.id}>
-                              {inv.name} ({inv.unit})
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex items-center gap-2 bg-muted/30 p-2 rounded-md border">
+                          <select
+                            className="flex-1 h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
+                            value={rec.inventoryItemId}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setRecipeIngredients((prev) =>
+                                prev.map((item, idx) =>
+                                  idx === index
+                                    ? { ...item, inventoryItemId: val }
+                                    : item,
+                                ),
+                              );
+                            }}
+                            aria-invalid={!!invError}
+                          >
+                            {items.map((inv) => (
+                              <option key={inv.id} value={inv.id}>
+                                {inv.name} ({inv.unit})
+                              </option>
+                            ))}
+                          </select>
 
-                        <Input
-                          type="number"
-                          step="0.01"
-                          className="w-24"
-                          value={rec.quantityRequired}
-                          onChange={(e) => {
-                            const val = parseFloat(e.target.value) || 0;
-                            setRecipeIngredients((prev) =>
-                              prev.map((item, idx) =>
-                                idx === index
-                                  ? { ...item, quantityRequired: val }
-                                  : item,
-                              ),
-                            );
-                          }}
-                          placeholder="Qty"
-                        />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            className="w-24"
+                            value={rec.quantityRequired}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0;
+                              setRecipeIngredients((prev) =>
+                                prev.map((item, idx) =>
+                                  idx === index
+                                    ? { ...item, quantityRequired: val }
+                                    : item,
+                                ),
+                              );
+                            }}
+                            placeholder="Qty"
+                            aria-invalid={!!qtyError}
+                          />
 
-                        <span className="text-xs text-muted-foreground w-10">
-                          {selectedInvItem?.unit ?? ""}
-                        </span>
+                          <span className="text-xs text-muted-foreground w-10">
+                            {selectedInvItem?.unit ?? ""}
+                          </span>
 
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-destructive hover:text-destructive"
-                          onClick={() =>
-                            setRecipeIngredients((prev) =>
-                              prev.filter((_, idx) => idx !== index),
-                            )
-                          }
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-destructive hover:text-destructive"
+                            onClick={() =>
+                              setRecipeIngredients((prev) =>
+                                prev.filter((_, idx) => idx !== index),
+                              )
+                            }
+                          >
+                            <Trash2 className="size-4" />
+                          </Button>
+                        </div>
+                      </FieldComponent>
                     );
                   })}
                 </div>

@@ -14,3 +14,5 @@ export type MenuInventoryItem = {
   inventoryItemId: string;
   quantityRequired: number;
 };
+
+export type MenuErrors = Record<string, string | undefined>;

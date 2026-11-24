@@ -43,6 +43,7 @@ export const users = pgTable(
     id: uuid().primaryKey().defaultRandom(),
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 255 }).notNull(),
+    phone: varchar("phone", { length: 64 }).notNull().default(""),
     passwordHash: text("passwordHash").notNull(),
     role: userRole().notNull().default("staff"),
     isActive: boolean().notNull().default(true),
@@ -73,10 +74,7 @@ export const staffShifts = pgTable(
   },
   (t) => [
     index("staff_shifts_staff_start_idx").on(t.staffId, t.startsAt),
-    check(
-      "staff_shifts_time_order",
-      sql`${t.endsAt} > ${t.startsAt}`,
-    ),
+    check("staff_shifts_time_order", sql`${t.endsAt} > ${t.startsAt}`),
   ],
 );
 
@@ -97,10 +95,7 @@ export const staffTimeEntries = pgTable(
     }),
   },
   (t) => [
-    index("staff_time_entries_staff_in_idx").on(
-      t.staffId,
-      t.clockedInAt,
-    ),
+    index("staff_time_entries_staff_in_idx").on(t.staffId, t.clockedInAt),
     uniqueIndex("staff_time_entries_one_open_idx")
       .on(t.staffId)
       .where(sql`${t.clockedOutAt} IS NULL`),
@@ -111,7 +106,6 @@ export const staffTimeEntries = pgTable(
     ),
   ],
 );
-
 
 /* ------------------------------------------------------------------ */
 /* Menu Items                                                          */
@@ -212,7 +206,9 @@ export const orders = pgTable(
     tableNumber: integer("table_number").notNull(),
     status: orderStatusEnum().notNull().default("pending"),
     // NULL identifies older orders whose actual stock deductions are unknown.
-    inventoryDeductions: jsonb("inventory_deductions").$type<OrderInventoryDeduction[]>(),
+    inventoryDeductions: jsonb("inventory_deductions").$type<
+      OrderInventoryDeduction[]
+    >(),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledBy: uuid("cancelled_by").references(() => users.id),
     cancelReason: text("cancel_reason"),
