@@ -4,8 +4,12 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Bell, Moon, Sun } from "lucide-react";
 
+import NotificationBellComponent, {
+  type Notification,
+} from "@/components/NotificationBellComponent";
+
+import { Bell, Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
@@ -32,9 +36,13 @@ const humanize = (s: string) =>
   s.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 
 export default function HeaderComponent({
-  notifications = 4,
+  notifications,
+  onMarkRead,
+  onMarkAllRead,
 }: {
-  notifications?: number;
+  notifications?: Notification[];
+  onMarkRead?: (id: string) => void;
+  onMarkAllRead?: () => void;
 }) {
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
@@ -104,14 +112,11 @@ export default function HeaderComponent({
           )}
         </Button>
 
-        <Button variant="outline" aria-label={`${notifications} notifications`}>
-          <Bell className="size-4" />
-          {notifications > 0 && (
-            <span className="flex size-5 items-center justify-center rounded-full bg-red-500 text-xs font-medium text-white">
-              {notifications}
-            </span>
-          )}
-        </Button>
+        <NotificationBellComponent
+          notifications={notifications}
+          onMarkRead={onMarkRead}
+          onMarkAllRead={onMarkAllRead}
+        />
       </div>
     </header>
   );

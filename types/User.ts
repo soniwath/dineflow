@@ -1,6 +1,12 @@
 export type UserStatus = "active" | "disabled";
 
-export type UserRole = "owner" | "manager" | "staff";
+export type UserRole = {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type FilterOption = {
   value: string;
@@ -14,7 +20,8 @@ export type User = {
   name: string;
   email: string;
   phone: string;
-  role: UserRole;
+  roleId: string;
+  role: string;
   isActive: boolean;
   lastLoginAt: string | null;
   createdAt: string;
@@ -27,7 +34,7 @@ export type UpdateUserBody = Partial<{
   email: string;
   password: string;
   phone: string;
-  role: UserRole;
+  roleId?: string;
   isActive: boolean;
   lastLoginAt: string | null;
 }>;
@@ -37,7 +44,7 @@ export type CreateUserBody = {
   email: string;
   phone: string;
   password: string;
-  role?: UserRole;
+  roleId?: string;
   isActive?: boolean;
 };
 

@@ -15,7 +15,13 @@ import {
   CreateUserBody,
   UpdateUserBody,
 } from "@/types/User";
-import { getUsers, createUser, updateUser, deleteUser } from "@/lib/api/users";
+import {
+  getUsers,
+  getUserRoles,
+  createUser,
+  updateUser,
+  deleteUser,
+} from "@/lib/api/users";
 
 /* ------------------------------------------------------------------ */
 /* Types & Helpers                                                    */
@@ -25,18 +31,12 @@ export const STATUS_LABEL: Record<UserStatus, string> = {
   disabled: "Disabled",
 };
 
-export const ROLE_LABEL: Record<UserRole, string> = {
-  owner: "Owner",
-  manager: "Manager",
-  staff: "Staff",
-};
-
 export const statusBadge: Record<UserStatus, string> = {
   active: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
   disabled: "bg-slate-500/15 text-slate-700 dark:text-slate-400",
 };
 
-export const roleBadge: Record<UserRole, string> = {
+export const roleBadge: Record<string, string> = {
   owner: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
   manager: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400",
   staff: "bg-slate-500/15 text-slate-700 dark:text-slate-400",
@@ -65,6 +65,7 @@ export function getInitials(name: string) {
 /* ------------------------------------------------------------------ */
 type UserContextValue = {
   users: User[];
+  userRoles: UserRole[];
   loading: boolean;
   loadData: (params?: any) => Promise<void>;
   addUser: (input: CreateUserBody) => Promise<User>;
@@ -76,13 +77,17 @@ const UserContext = createContext<UserContextValue | null>(null);
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
+  const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(false);
 
   const loadData = useCallback(async (params?: any) => {
     setLoading(true);
     try {
-      const data = await getUsers(params);
-      setUsers(data);
+      const users = await getUsers(params);
+      setUsers(users);
+
+      const roles = await getUserRoles();
+      setUserRoles(roles);
     } catch (error) {
       console.error("Failed to fetch users:", error);
     } finally {
@@ -113,6 +118,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       users,
+      userRoles,
       loading,
       loadData,
       addUser,

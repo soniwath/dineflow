@@ -199,14 +199,17 @@ export async function proxy(request: NextRequest) {
 
   try {
     const { payload } = await jwtVerify(token, secretKey);
-    const userRole = payload.role as Role;
+    const userRole = payload.role;
 
     if (isGuestAllowedPath) return finalize(NextResponse.next());
 
     const matchingRoute = ROUTE_ROLES.find((r) =>
       matchesPath(pathname, r.prefix),
     );
-    if (matchingRoute && !matchingRoute.allowedRoles.includes(userRole)) {
+    if (
+      matchingRoute &&
+      !matchingRoute.allowedRoles.includes(userRole.toLowerCase())
+    ) {
       return finalize(NextResponse.redirect(new URL("/login", request.url)));
     }
 

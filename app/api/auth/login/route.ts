@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/index";
-import { users } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { users, userRoles } from "@/lib/db/schema";
+import { eq, and, sql } from "drizzle-orm";
 const bcrypt = require("bcrypt");
 import { cookies } from "next/headers";
 import { signToken } from "@/lib/auth/jwt";
@@ -13,7 +13,7 @@ const loginLimiter = new RateLimiterMemory({
 });
 
 export async function POST(request: Request) {
-  if (process.env.RATE_LIMITING_ENABLED) {
+  if (process.env.RATE_LIMITING_ENABLED === "true") {
     try {
       await loginLimiter.consume(
         request.headers.get("x-forwarded-for") || "127.0.0.1",
@@ -42,9 +42,21 @@ export async function POST(request: Request) {
 
     // 1. Find user in database
     const [user] = await db
-      .select()
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        passwordHash: users.passwordHash,
+        role: userRoles.name,
+      })
       .from(users)
-      .where(and(eq(users.isActive, true), eq(users.email, email.trim())))
+      .leftJoin(userRoles, eq(users.roleId, userRoles.id))
+      .where(
+        and(
+          eq(users.isActive, true),
+          eq(sql`lower(${users.email})`, email.trim().toLowerCase()),
+        ),
+      )
       .limit(1);
 
     if (!user || !user.passwordHash) {
@@ -66,7 +78,7 @@ export async function POST(request: Request) {
     // 3. Generate JWT containing user info
     const token = await signToken({
       id: user.id,
-      role: user.role,
+      role: user.role ?? "",
       name: user.name,
     });
 

@@ -4,10 +4,7 @@ export const userBaseSchema = z.object({
   name: z.string().min(1, "Enter a name."),
   email: z.string().email("Enter a valid email address."),
   phone: z.string().min(1, "Enter a phone number."),
-  role: z.enum(["owner", "manager", "staff"], {
-    error: (issue) =>
-      issue.input === undefined ? "Role is required" : "Invalid role",
-  }),
+  roleId: z.string(),
   password: z
     .string()
     .min(6, "Password must be at least 6 characters long.")

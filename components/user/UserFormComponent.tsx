@@ -4,18 +4,27 @@ import { Input } from "@/components/ui/input";
 import { DialogClose } from "@/components/ui/dialog";
 import { UserRole, UserStatus, User } from "@/types/User";
 import FieldComponent from "@/components/FieldComponent";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function UserFormComponent({
   user,
+  userRoles,
   onSubmit,
   saving,
   errors,
 }: {
   user: User | null;
+  userRoles: UserRole[];
   onSubmit: (input: {
     name: string;
     email: string;
-    role: UserRole;
+    roleId: string;
     status: UserStatus;
     phone: string;
     password?: string;
@@ -26,7 +35,7 @@ export default function UserFormComponent({
   const [name, setName] = useState(user?.name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
-  const [role, setRole] = useState<UserRole>(user?.role ?? "staff");
+  const [roleId, setRoleId] = useState(user?.roleId ?? null);
   const [status, setStatus] = useState<UserStatus>(
     user?.isActive ? "active" : "disabled",
   );
@@ -56,17 +65,25 @@ export default function UserFormComponent({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <FieldComponent id="role" label="Role" error={errors.role}>
-          <select
-            value={role}
-            onChange={(event) => setRole(event.target.value as UserRole)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            aria-invalid={!!errors.role}
-          >
-            <option value="owner">Owner</option>
-            <option value="manager">Manager</option>
-            <option value="staff">Staff</option>
-          </select>
+        <FieldComponent id="role" label="Role" error={errors.roleId}>
+          <Select value={roleId} onValueChange={setRoleId}>
+            <SelectTrigger
+              id="role"
+              className="w-full"
+              aria-invalid={!!errors.roleId}
+            >
+              <SelectValue placeholder="Select a role">
+                {userRoles.find((r) => r.id === roleId)?.name}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {userRoles.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </FieldComponent>
 
         <FieldComponent id="status" label="Status" error={errors.isActive}>
@@ -119,7 +136,7 @@ export default function UserFormComponent({
             onSubmit({
               name: name.trim(),
               email: email.trim(),
-              role,
+              roleId: roleId ?? "",
               status,
               phone: phone.trim(),
               password: password.trim() || undefined,

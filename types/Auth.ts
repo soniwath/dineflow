@@ -1,11 +1,9 @@
-import { ROLES } from "@/stores/AuthStore";
-
-export type Role = (typeof ROLES)[number];
+export type Role = "guest" | "staff" | "manager" | "owner";
 
 export type AuthUser = {
   id: string;
   name: string;
-  role: Role;
+  role: string;
 };
 
 export type Credentials = {

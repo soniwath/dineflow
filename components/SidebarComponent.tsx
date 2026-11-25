@@ -36,7 +36,7 @@ export default function SidebarComponent() {
     if (!item.roles) return true;
 
     // Otherwise, check if the user's role is included in the allowed list
-    return item.roles.includes(currentRole);
+    return item.roles.includes(currentRole.toLowerCase());
   });
 
   return (

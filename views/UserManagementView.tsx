@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   FilterOption,
-  UserRole,
   UserStatus,
   User,
   UpdateUserBody,
@@ -13,7 +12,6 @@ import {
 import {
   useUsersStore,
   STATUS_LABEL,
-  ROLE_LABEL,
   statusBadge,
   roleBadge,
   AVATAR_COLORS,
@@ -50,8 +48,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LayoutGrid, List, Plus, Search, Loader2 } from "lucide-react";
 
 export default function UserManagementView() {
-  const { users, loading, loadData, addUser, updateUserRecord, removeUser } =
-    useUsersStore();
+  const {
+    users,
+    userRoles,
+    loading,
+    loadData,
+    addUser,
+    updateUserRecord,
+    removeUser,
+  } = useUsersStore();
 
   const [tab, setTab] = useState("users");
   const [view, setView] = useState<"list" | "card">("list");
@@ -113,19 +118,27 @@ export default function UserManagementView() {
     },
   ];
 
-  const roleOptions: FilterOption[] = (
-    ["owner", "manager", "staff"] as UserRole[]
-  ).map((role) => ({
-    value: role,
-    label: ROLE_LABEL[role],
-    count: users.filter((user) => user.role === role).length,
+  const DOT_COLORS: Record<string, string> = {
+    owner: "bg-violet-500",
+    manager: "bg-cyan-500",
+  };
+  const FALLBACK_DOTS = [
+    "bg-emerald-500",
+    "bg-amber-500",
+    "bg-rose-500",
+    "bg-slate-500",
+  ];
+  const roleOptions: FilterOption[] = userRoles.map((role, i) => ({
+    value: role.id, // the API filters by roleId, so use the id
+    label: role.name,
+    count: users.filter((user) => user.roleId === role.id).length,
     dot:
-      role === "owner"
-        ? "bg-violet-500"
-        : role === "manager"
-          ? "bg-cyan-500"
-          : "bg-slate-500",
+      DOT_COLORS[role.name.toLowerCase()] ??
+      FALLBACK_DOTS[i % FALLBACK_DOTS.length],
   }));
+  const getRole = (user: any) => {
+    return userRoles.find((role) => role.id === user.roleId)?.name ?? "N/A";
+  };
 
   const rows = useMemo(() => {
     return users
@@ -134,7 +147,8 @@ export default function UserManagementView() {
           if (statusFilter.includes("active") && !user.isActive) return false;
           if (statusFilter.includes("disabled") && user.isActive) return false;
         }
-        if (roleFilter.length && !roleFilter.includes(user.role)) return false;
+        if (roleFilter.length && !roleFilter.includes(user.roleId))
+          return false;
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -157,7 +171,7 @@ export default function UserManagementView() {
   const handleSubmit = async (input: {
     name: string;
     email: string;
-    role: UserRole;
+    roleId: string;
     status: UserStatus;
     phone: string;
     password?: string;
@@ -186,7 +200,7 @@ export default function UserManagementView() {
           name: result.data.name,
           email: result.data.email,
           phone: result.data.phone,
-          role: result.data.role,
+          roleId: result.data.roleId,
           isActive: result.data.isActive,
         };
 
@@ -199,7 +213,7 @@ export default function UserManagementView() {
         const payload: CreateUserBody = {
           name: result.data.name,
           email: result.data.email,
-          role: result.data.role,
+          roleId: result.data.roleId,
           phone: result.data.phone,
           isActive: result.data.isActive,
           password: result.data.password ?? "",
@@ -282,7 +296,7 @@ export default function UserManagementView() {
             >
               Roles
               <span className="text-xs tabular-nums text-muted-foreground">
-                {Object.keys(ROLE_LABEL).length}
+                {userRoles.length}
               </span>
             </TabsTrigger>
           </TabsList>
@@ -457,10 +471,10 @@ export default function UserManagementView() {
                         <Badge
                           className={cn(
                             "rounded-full font-normal",
-                            roleBadge[user.role],
+                            roleBadge[getRole(user).toLowerCase()],
                           )}
                         >
-                          {ROLE_LABEL[user.role]}
+                          {getRole(user)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -529,10 +543,10 @@ export default function UserManagementView() {
                       <Badge
                         className={cn(
                           "rounded-full font-normal",
-                          roleBadge[user.role],
+                          roleBadge[getRole(user).toLowerCase()],
                         )}
                       >
-                        {ROLE_LABEL[user.role]}
+                        {getRole(user)}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
                         {user.lastLoginAt ?? "N/A"}
@@ -604,13 +618,13 @@ export default function UserManagementView() {
 
         <TabsContent value="roles" className="mt-0">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {(["owner", "manager", "staff"] as UserRole[]).map((role) => {
-              const members = users.filter((user) => user.role === role);
+            {userRoles.map((role) => {
+              const members = users.filter((user) => user.roleId === role.id);
               const active = members.filter((user) => user.isActive).length;
 
               return (
                 <article
-                  key={role}
+                  key={role.id}
                   className="flex flex-col gap-3 rounded-xl border bg-card p-4"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -618,28 +632,36 @@ export default function UserManagementView() {
                       <div
                         className={cn(
                           "size-2.5 rounded-full",
-                          role === "owner"
-                            ? "bg-violet-500"
-                            : role === "manager"
-                              ? "bg-cyan-500"
-                              : role === "staff"
-                                ? "bg-amber-500"
-                                : "bg-slate-500",
+                          DOT_COLORS[role.name.toLowerCase()] ??
+                            FALLBACK_DOTS[
+                              Math.abs(
+                                role.name
+                                  .split("")
+                                  .reduce(
+                                    (sum, char) => sum + char.charCodeAt(0),
+                                    0,
+                                  ),
+                              ) % FALLBACK_DOTS.length
+                            ],
                         )}
                       />
-                      <h3 className="text-sm font-medium">
-                        {ROLE_LABEL[role]}
-                      </h3>
+                      <h3 className="text-sm font-medium">{role.name}</h3>
                     </div>
                     <Badge
                       className={cn(
                         "rounded-full font-normal",
-                        roleBadge[role],
+                        roleBadge[role.name.toLowerCase()],
                       )}
                     >
                       {active} active
                     </Badge>
                   </div>
+
+                  {role.description && (
+                    <p className="text-sm text-muted-foreground">
+                      {role.description}
+                    </p>
+                  )}
 
                   <p className="text-sm text-muted-foreground">
                     {members.length}{" "}
@@ -651,7 +673,7 @@ export default function UserManagementView() {
                     size="sm"
                     className="mt-auto self-start"
                     onClick={() => {
-                      setRoleFilter([role]);
+                      setRoleFilter([role.id]);
                       setStatusFilter([]);
                       setQuery("");
                       setPage(1);
@@ -684,6 +706,7 @@ export default function UserManagementView() {
           <UserFormComponent
             key={formKey}
             user={editing}
+            userRoles={userRoles}
             onSubmit={handleSubmit}
             saving={saving}
             errors={userErrors}

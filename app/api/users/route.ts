@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { or, and, eq, ilike } from "drizzle-orm";
+import { or, and, eq, ilike, SQL } from "drizzle-orm";
 const bcrypt = require("bcrypt");
 
 import { db } from "@/lib/db/index";
-import { users } from "@/lib/db/schema";
-import { CreateUserBody, UserRole } from "@/types/User";
+import { users, userRoles } from "@/lib/db/schema";
+import { CreateUserBody } from "@/types/User";
 import { isAuthenticated } from "@/lib/auth/jwt";
 
-function sanitizeUser(row: typeof users.$inferSelect) {
+function sanitizeUser(row: any) {
   const { passwordHash, ...safe } = row;
   return safe;
 }
@@ -22,7 +22,7 @@ export async function GET(req: Request) {
 
   const { searchParams } = new URL(req.url);
   const params = Object.fromEntries(searchParams.entries());
-  const { q, role, status } = params;
+  const { q, roleId, status } = params;
 
   const conditions: any = [];
 
@@ -39,14 +39,25 @@ export async function GET(req: Request) {
     conditions.push(eq(users.isActive, true));
   }
 
-  if (role) {
-    conditions.push(eq(users.role, role as UserRole));
+  if (roleId) {
+    conditions.push(eq(users.roleId, roleId));
   }
 
   // 2. Execute the query with all active conditions
   const rows = await db
-    .select()
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      isActive: users.isActive,
+      lastLoginAt: users.lastLoginAt,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+      role: userRoles.name,
+      roleId: userRoles.id,
+    })
     .from(users)
+    .leftJoin(userRoles, eq(users.roleId, userRoles.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(users.createdAt);
 
@@ -80,7 +91,7 @@ export async function POST(req: Request) {
         name: body.name.trim(),
         email,
         passwordHash,
-        role: body.role ?? "staff",
+        roleId: body.roleId,
         isActive: body.isActive ?? true,
       })
       .returning();

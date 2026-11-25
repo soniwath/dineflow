@@ -19,13 +19,6 @@ import {
 import type { BillItem } from "@/types/Bill";
 import type { OrderInventoryDeduction } from "@/types/Order";
 
-/* ------------------------------------------------------------------ */
-/* Roles                                                               */
-/* ------------------------------------------------------------------ */
-// "guest" is deliberately not here: guests don't have an account, so they
-// are never stored. They only exist in the client auth state.
-export const userRole = pgEnum("user_role", ["staff", "manager", "owner"]);
-
 const timestamps = {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp({ withTimezone: true })
@@ -35,27 +28,39 @@ const timestamps = {
 };
 
 /* ------------------------------------------------------------------ */
+/* User Roles                                                               */
+/* ------------------------------------------------------------------ */
+export const userRoles = pgTable("roles", {
+  id: uuid().primaryKey().defaultRandom(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description").notNull().default(""),
+  ...timestamps,
+});
+
+/* ------------------------------------------------------------------ */
 /* Users                                                               */
 /* ------------------------------------------------------------------ */
 export const users = pgTable(
   "users",
   {
     id: uuid().primaryKey().defaultRandom(),
+    roleId: uuid("role_id").references(() => userRoles.id, {
+      onDelete: "set null",
+    }),
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 255 }).notNull(),
     phone: varchar("phone", { length: 64 }).notNull().default(""),
     passwordHash: text("passwordHash").notNull(),
-    role: userRole().notNull().default("staff"),
     isActive: boolean().notNull().default(true),
     lastLoginAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
   (t) => [uniqueIndex("users_email_unique").on(sql`lower(${t.email})`)],
 );
+
 /* ------------------------------------------------------------------ */
 /* Staff Scheduling                                                     */
 /* ------------------------------------------------------------------ */
-
 export const staffShifts = pgTable(
   "staff_shifts",
   {
@@ -327,4 +332,27 @@ export const reservations = pgTable("reservations", {
     .defaultNow()
     .notNull()
     .$onUpdate(() => sql`NOW()`),
+});
+
+/* ------------------------------------------------------------------ */
+/* Notification                                                        */
+/* ------------------------------------------------------------------ */
+export const notificationTypeEnum = pgEnum("notification_type", [
+  "order_update",
+  "reservation_update",
+  "inventory_alert",
+]);
+
+export const notificationStatusEnum = pgEnum("notification_status", [
+  "unread",
+  "read",
+]);
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  type: notificationTypeEnum().notNull(),
+  status: notificationStatusEnum().notNull().default("unread"),
+  ...timestamps,
 });

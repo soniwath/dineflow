@@ -21,7 +21,7 @@ export default function GuestOnlyComponent({
   const router = useRouter();
 
   useEffect(() => {
-    if (user) router.replace(ROLE_HOME[user.role]);
+    if (user) router.replace(ROLE_HOME[user.role.toLowerCase()]);
   }, [user, router]);
 
   // Render nothing while redirecting so the form doesn't flash.

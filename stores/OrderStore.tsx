@@ -13,6 +13,7 @@ import {
   updateOrderStatusApi,
   cancelOrderApi,
 } from "@/lib/api/orders";
+import { createNotification } from "@/lib/api/notifications";
 import type { MenuItem } from "@/types/Menu";
 import type { Tickets } from "@/types/Tickets";
 import type { KitchenTicket } from "@/types/KitchenTicket";
@@ -111,9 +112,13 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   const cancelKitchenOrder = useCallback(async (id: string, reason: string) => {
     const updated = await cancelOrderApi(id, reason);
-    setOrders((current) => current.map((order) => order.id === updated.id
-      ? { ...order, status: updated.status, canCancel: false }
-      : order));
+    setOrders((current) =>
+      current.map((order) =>
+        order.id === updated.id
+          ? { ...order, status: updated.status, canCancel: false }
+          : order,
+      ),
+    );
   }, []);
 
   const sendOrderToKitchen = useCallback(
@@ -130,6 +135,14 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       );
 
       await apiCreateOrder({ tableNumber, items });
+
+      // Send notification to kitchen
+      const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+      await createNotification({
+        title: `New order · Table ${tableNumber}`,
+        message: `${itemCount} ${itemCount === 1 ? "item" : "items"} sent to the kitchen.`,
+        type: "order_update",
+      });
 
       setTickets((prev) => ({ ...prev, [tableNumber]: {} }));
       await loadData(); // Refresh orders after sending to kitchen

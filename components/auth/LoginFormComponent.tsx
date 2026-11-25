@@ -40,7 +40,7 @@ export default function LoginFormComponent() {
     setLoading(true);
     const result = await login({ email: value, password });
     if (result.ok) {
-      router.push(ROLE_HOME[result.user.role]);
+      router.push(ROLE_HOME[result.user.role.toLowerCase()]);
       return; // keep the loading state while navigating
     }
     setLoading(false);
