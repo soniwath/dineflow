@@ -5,15 +5,10 @@ import { cn, money } from "@/lib/utils";
 
 import { useOrder } from "@/stores/OrderStore";
 import { useFloor } from "@/stores/FloorStore";
+import { useSearchParams } from "next/navigation";
 
-import {
-  Minus,
-  Plus,
-  Grid,
-  CreditCard,
-  ShoppingBag,
-  Loader2,
-} from "lucide-react";
+import OrderSkeleton from "@/components/OrderSkeleton";
+import { Minus, Plus, Grid, CreditCard, ShoppingBag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +27,9 @@ import MenuCardComponent from "@/components/MenuCardComponent";
 /* Order view                                                          */
 /* ------------------------------------------------------------------ */
 export default function OrderView() {
+  const searchParams = useSearchParams();
+  const tableNumber = searchParams.get("table");
+
   const {
     menu,
     itemsById,
@@ -45,7 +43,7 @@ export default function OrderView() {
   const { tables, loading: isFloorLoading, loadData: loadFloor } = useFloor();
 
   const [category, setCategory] = useState<string>("");
-  const [table, setTable] = useState<number>(4);
+  const [table, setTable] = useState<number>(Number(tableNumber) || 1);
   const [viewMode, setViewMode] = useState<"table" | "card">("table");
   const [cartOpen, setCartOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -94,12 +92,7 @@ export default function OrderView() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center gap-2 text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-        <span>Loading menu...</span>
-      </div>
-    );
+    return <OrderSkeleton />;
   }
 
   return (

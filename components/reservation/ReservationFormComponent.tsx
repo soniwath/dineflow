@@ -6,7 +6,7 @@ import {
   ReservationInput,
 } from "@/types/Reservation";
 
-import FieldComponent from "@/components/reservation/FieldComponent";
+import FieldComponent from "@/components/FieldComponent";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
@@ -60,12 +60,7 @@ export default function ReservationFormComponent({
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
-        <FieldComponent
-          id="name"
-          label="Guest name"
-          error={errors.name}
-          className="col-span-2"
-        >
+        <FieldComponent id="name" label="Guest name" error={errors.name}>
           <Input
             id="name"
             placeholder="e.g. Dara Chhun"
@@ -91,6 +86,7 @@ export default function ReservationFormComponent({
             type="tel"
             value={form.phone}
             onChange={(e) => set("phone", e.target.value)}
+            placeholder="e.g. 555-123-4567"
           />
         </FieldComponent>
         <FieldComponent id="date" label="Date" error={errors.date}>
@@ -111,11 +107,7 @@ export default function ReservationFormComponent({
             onChange={(e) => set("time", e.target.value)}
           />
         </FieldComponent>
-        <FieldComponent
-          id="notes"
-          label="Notes (optional)"
-          className="col-span-2"
-        >
+        <FieldComponent id="notes" label="Notes (optional)">
           <Input
             id="notes"
             placeholder="Allergies, occasion, seating request"

@@ -55,7 +55,9 @@ export async function updateOrderStatusApi(
   });
   const data = await res.json();
   if (!res.ok) {
-    throw new Error(data.message ?? data.error ?? "Failed to update order status");
+    throw new Error(
+      data.message ?? data.error ?? "Failed to update order status",
+    );
   }
 
   return data.order;
@@ -73,7 +75,9 @@ export async function cancelOrderApi(id: string, reason: string) {
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data?.message ?? "Could not cancel order.");
   if (data?.order?.id !== id || data.order.status !== "cancelled") {
-    throw new Error("Could not confirm cancellation. Refresh Kitchen before trying again.");
+    throw new Error(
+      "Could not confirm cancellation. Refresh Kitchen before trying again.",
+    );
   }
   return data.order as Pick<SavedOrder, "id" | "status">;
 }

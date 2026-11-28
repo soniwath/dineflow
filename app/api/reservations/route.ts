@@ -1,9 +1,18 @@
 import { NextResponse } from "next/server";
+import { unstable_cache, revalidateTag } from "next/cache";
 import { db } from "@/lib/db/index";
 import { reservations } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { isAuthenticated } from "@/lib/auth/jwt";
+
+export const RESERVATIONS_CACHE_TAG = "reservations";
+
+const getCachedReservations = unstable_cache(
+  async () => db.select().from(reservations),
+  ["reservations-route"],
+  { tags: [RESERVATIONS_CACHE_TAG], revalidate: 300 }, // Revalidates every 5 mins or on reservation mutation
+);
 
 export async function GET() {
   try {
@@ -13,7 +22,9 @@ export async function GET() {
         { status: 401 },
       );
     }
-    const allReservations = await db.select().from(reservations);
+
+    const allReservations = await getCachedReservations();
+
     return NextResponse.json({ success: true, reservations: allReservations });
   } catch (error: any) {
     return NextResponse.json(
@@ -34,19 +45,27 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { name, phone, party, date, time, notes } = body;
 
-    const [newRes] = await db
-      .insert(reservations)
-      .values({
-        name,
-        phone: phone || "",
-        party: Number(party),
-        date,
-        time,
-        notes: notes || "",
-        status: "booked",
-        tableId: null,
-      })
-      .returning();
+    // Use db transactions
+    const newRes = await db.transaction(async (tx) => {
+      const [reservation] = await tx
+        .insert(reservations)
+        .values({
+          name,
+          phone: phone || "",
+          party: Number(party),
+          date,
+          time,
+          notes: notes || "",
+          status: "booked",
+          tableId: null,
+        })
+        .returning();
+
+      return reservation;
+    });
+
+    // Revalidate only AFTER the transaction has committed
+    revalidateTag(RESERVATIONS_CACHE_TAG, { expire: 0 });
 
     return NextResponse.json({ success: true, reservation: newRes });
   } catch (error: any) {
@@ -84,11 +103,19 @@ export async function PUT(request: Request) {
     if (patch.status !== undefined) updateData.status = patch.status;
     if (patch.tableId !== undefined) updateData.tableId = patch.tableId;
 
-    const [updated] = await db
-      .update(reservations)
-      .set(updateData)
-      .where(eq(reservations.id, id))
-      .returning();
+    // Use db transaction
+    const updated = await db.transaction(async (tx) => {
+      const [reservation] = await tx
+        .update(reservations)
+        .set(updateData)
+        .where(eq(reservations.id, id))
+        .returning();
+
+      return reservation;
+    });
+
+    // Revalidate only AFTER the transaction has committed
+    revalidateTag(RESERVATIONS_CACHE_TAG, { expire: 0 });
 
     return NextResponse.json({ success: true, reservation: updated });
   } catch (error: any) {
@@ -116,6 +143,10 @@ export async function DELETE(request: Request) {
       );
 
     await db.delete(reservations).where(eq(reservations.id, id));
+
+    // Revalidate only AFTER the delete
+    revalidateTag(RESERVATIONS_CACHE_TAG, { expire: 0 });
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json(

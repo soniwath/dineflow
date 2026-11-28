@@ -12,8 +12,10 @@ import { useFloor } from "@/stores/FloorStore";
 import { useReservations, todayISO } from "@/stores/ReservationStore";
 import { useOrder } from "@/stores/OrderStore";
 import { useInventory } from "@/stores/InventoryStore";
+import { useTodaySales } from "@/hooks/useTodaySales";
 
-import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
+import HomeSkeleton from "@/components/HomeSkeleton";
+import { ArrowRight, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +37,11 @@ const statusStyles: Record<TableStatus, string> = {
 
 const queueTabs = [
   { status: "pending", label: "Placed", empty: "No placed orders." },
-  { status: "preparing", label: "Preparing", empty: "No orders being prepared." },
+  {
+    status: "preparing",
+    label: "Preparing",
+    empty: "No orders being prepared.",
+  },
   { status: "ready", label: "Ready", empty: "No orders waiting to be served." },
 ] as const;
 type QueueTab = (typeof queueTabs)[number]["status"];
@@ -63,9 +69,21 @@ export default function HomeView() {
     loading: inventoryLoading,
     loadData: loadInventory,
   } = useInventory();
+  const {
+    data: salesData,
+    error: salesError,
+    loading: salesLoading,
+  } = useTodaySales();
+
+  const salesToday = salesData?.summary.netSales ?? 0; // adjust field
+  const ordersClosed = salesData?.summary.totalOrders ?? 0;
 
   const loading =
-    floorLoading || resLoading || orderLoading || inventoryLoading;
+    floorLoading ||
+    resLoading ||
+    orderLoading ||
+    inventoryLoading ||
+    salesLoading;
 
   const kitchenQueue = {
     pending: kitchenTickets.filter((ticket) => ticket.status === "pending"),
@@ -106,12 +124,7 @@ export default function HomeView() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center gap-2 text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-        <span>Loading dashboard...</span>
-      </div>
-    );
+    return <HomeSkeleton />;
   }
 
   return (
@@ -134,8 +147,10 @@ export default function HomeView() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <HomeStatCardComponent
           label="Sales today"
-          value={money.format(1284)}
-          note="42 orders closed"
+          value={money.format(salesToday / 100)}
+          note={
+            salesError ? "Sales unavailable" : `${ordersClosed} orders closed`
+          }
         />
         <HomeStatCardComponent
           label="Open orders"
@@ -174,7 +189,9 @@ export default function HomeView() {
                 variant="ghost"
                 size="sm"
                 nativeButton={false}
-                render={<Link href="/floor-plan" className="flex items-center" />}
+                render={
+                  <Link href="/floor-plan" className="flex items-center" />
+                }
               >
                 <span>Floor plan</span>
                 <ArrowRight className="ml-1.5 size-4" />
@@ -218,7 +235,10 @@ export default function HomeView() {
           <Card role="region" aria-labelledby="home-kitchen-queue-heading">
             <CardHeader className="flex flex-row items-start justify-between gap-3">
               <div className="space-y-1">
-                <CardTitle id="home-kitchen-queue-heading" className="text-base">
+                <CardTitle
+                  id="home-kitchen-queue-heading"
+                  className="text-base"
+                >
                   Kitchen queue
                 </CardTitle>
                 <CardDescription>
@@ -239,7 +259,9 @@ export default function HomeView() {
                   variant="ghost"
                   size="sm"
                   nativeButton={false}
-                  render={<Link href="/kitchen" className="flex items-center" />}
+                  render={
+                    <Link href="/kitchen" className="flex items-center" />
+                  }
                 >
                   <span>Open display</span>
                   <ArrowRight className="ml-1.5 size-4" />
@@ -256,13 +278,20 @@ export default function HomeView() {
                   value={queueTab}
                   onValueChange={(value) => {
                     if (
-                      value === "pending" || value === "preparing" || value === "ready"
-                    ) setQueueTab(value);
+                      value === "pending" ||
+                      value === "preparing" ||
+                      value === "ready"
+                    )
+                      setQueueTab(value);
                   }}
                 >
                   <TabsList>
                     {queueTabs.map(({ status, label }) => (
-                      <TabsTrigger key={status} value={status} className="gap-2 px-3">
+                      <TabsTrigger
+                        key={status}
+                        value={status}
+                        className="gap-2 px-3"
+                      >
                         {label}
                         <span className="text-xs tabular-nums text-muted-foreground">
                           {kitchenQueue[status].length}
@@ -294,15 +323,25 @@ export default function HomeView() {
                                 </Badge>
                                 <span className="min-w-0 flex-1 truncate">
                                   {ticket.items
-                                    .map((item) => `${item.quantity}× ${item.name}`)
+                                    .map(
+                                      (item) =>
+                                        `${item.quantity}× ${item.name}`,
+                                    )
                                     .join(", ")}
                                 </span>
                                 {status !== "ready" && (
                                   <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                                    {now === null ? "—" : Math.max(
-                                      0,
-                                      Math.floor((now - Date.parse(ticket.createdAt)) / 60_000),
-                                    )} min
+                                    {now === null
+                                      ? "—"
+                                      : Math.max(
+                                          0,
+                                          Math.floor(
+                                            (now -
+                                              Date.parse(ticket.createdAt)) /
+                                              60_000,
+                                          ),
+                                        )}{" "}
+                                    min
                                   </span>
                                 )}
                               </li>

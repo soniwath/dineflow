@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
+import SchedulingSkeleton from "@/components/scheduling/SchedulingSkeleton";
 import AttendancePanel from "@/components/scheduling/AttendancePanel";
 import ShiftForm from "@/components/scheduling/ShiftForm";
 import { Button } from "@/components/ui/button";
@@ -28,29 +29,19 @@ import {
   getWeekDates,
   getWeekStart,
 } from "@/lib/scheduling";
+import { getUserRoles } from "@/lib/api/users";
 import { cn } from "@/lib/utils";
-import type {
-  AttendanceInput,
-  ScheduleData,
-  Shift,
-  StaffRole,
-} from "@/types/Scheduling";
+import type { AttendanceInput, ScheduleData, Shift } from "@/types/Scheduling";
+import type { UserRole } from "@/types/User";
 
-const roleLabels: Record<StaffRole, string> = {
+const roleLabels: Record<string, string> = {
   staff: "Staff",
-  server: "Server",
-  host: "Host",
-  kitchen: "Kitchen",
   manager: "Manager",
   owner: "Owner",
 };
 
-const roleColors: Record<StaffRole, string> = {
+const roleColors: Record<string, string> = {
   staff: "border-zinc-500/25 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300",
-  server: "border-blue-500/25 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-  host: "border-amber-500/25 bg-amber-500/10 text-amber-800 dark:text-amber-300",
-  kitchen:
-    "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   manager: "border-zinc-500/25 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300",
   owner: "border-zinc-500/25 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300",
 };
@@ -104,7 +95,28 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
   const staff = data?.staff ?? [];
   const shifts = data?.shifts ?? [];
   const entries = data?.entries ?? [];
-  const roles = [...new Set(staff.map((person) => person.role))];
+  const [allRoles, setAllRoles] = useState<UserRole[]>([]);
+  const [roles, setRoles] = useState<string[]>([]);
+
+  const getRoleName = (roleId: string) => {
+    const role = allRoles?.find((role) => role.id === roleId) || {
+      name: "staff",
+    };
+    return role.name.toLowerCase();
+  };
+
+  useEffect(() => {
+    async function loadRoles() {
+      const userRoles = await getUserRoles();
+      setAllRoles(userRoles);
+      const roleIds = new Set(staff.map((person) => person.roleId));
+      const filteredRoles = userRoles.filter((role) => roleIds.has(role.id));
+      setRoles(filteredRoles.map((role) => role.name.toLowerCase()));
+    }
+
+    void loadRoles();
+  }, [staff]);
+
   const activeStaff = staff.filter((person) => person.isActive !== false);
   const busy = saving || attendanceSavingId !== null;
 
@@ -163,15 +175,14 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
   }
 
   async function handleAttendance(action: AttendanceInput["action"]) {
-    if (attendancePending.current || saving || loading || error || !data) return;
+    if (attendancePending.current || saving || loading || error || !data)
+      return;
     const staffId = data.currentUserId;
     const active = getActiveTimeEntry(entries, staffId);
     if (action === "clock-out" && !active) return;
 
     const input: AttendanceInput =
-      action === "clock-in"
-        ? { action }
-        : { action, entryId: active!.id };
+      action === "clock-in" ? { action } : { action, entryId: active!.id };
     attendancePending.current = true;
     setAttendanceSavingId(staffId);
     setAttendanceError(null);
@@ -192,12 +203,12 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
     }
   }
 
+  if (loading) {
+    return <SchedulingSkeleton />;
+  }
+
   return (
-    <section
-      className="min-w-0 space-y-5"
-      aria-labelledby="scheduling-heading"
-      aria-busy={loading}
-    >
+    <section className="min-w-0 space-y-5" aria-labelledby="scheduling-heading">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
           <h1 id="scheduling-heading" className="text-2xl font-semibold">
@@ -214,7 +225,7 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
             type="button"
             variant="outline"
             aria-label="Refresh schedule"
-            disabled={loading || busy}
+            disabled={busy}
             onClick={() => {
               setAttendanceError(null);
               setRefreshCount((count) => count + 1);
@@ -226,9 +237,7 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
           {canManageSchedule && (
             <Button
               type="button"
-              disabled={
-                loading || busy || Boolean(error) || activeStaff.length === 0
-              }
+              disabled={busy || Boolean(error) || activeStaff.length === 0}
               onClick={() => {
                 const person = activeStaff[0];
                 if (person)
@@ -300,9 +309,9 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
           </div>
 
           <div className="flex flex-wrap gap-2" aria-label="Role color legend">
-            {roles.map((role) => (
+            {roles.map((role, index) => (
               <span
-                key={role}
+                key={index}
                 className={cn(
                   "rounded-md border px-2.5 py-1 text-xs font-medium",
                   roleColors[role],
@@ -364,19 +373,15 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
                 </tr>
               </thead>
               <tbody>
-                {(loading || error || staff.length === 0) && (
+                {(error || staff.length === 0) && (
                   <tr>
                     <td
                       colSpan={8}
                       className="p-8 text-center text-muted-foreground"
                     >
-                      {loading ? (
-                        <span role="status">Loading schedule…</span>
-                      ) : error ? (
-                        "Schedule unavailable. Refresh to try again."
-                      ) : (
-                        "No staff members found."
-                      )}
+                      {error
+                        ? "Schedule unavailable. Refresh to try again."
+                        : "No staff members found."}
                     </td>
                   </tr>
                 )}
@@ -388,7 +393,7 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
                     >
                       <span className="block">{person.name}</span>
                       <span className="mt-1 block text-xs font-normal text-muted-foreground">
-                        {roleLabels[person.role]}
+                        {roleLabels[getRoleName(person.roleId)]}
                         {person.isActive === false && " · Inactive"}
                       </span>
                     </th>
@@ -435,7 +440,7 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
                                     title={shift.notes || undefined}
                                     className={cn(
                                       "block w-full rounded-lg border px-2 py-2.5 text-left text-xs leading-5",
-                                      roleColors[person.role],
+                                      roleColors[getRoleName(person.roleId)],
                                     )}
                                   >
                                     <span className="block font-medium">

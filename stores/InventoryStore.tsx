@@ -4,6 +4,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -14,18 +15,22 @@ import {
   getInventoryItemsApi,
   saveInventoryItemApi,
   deleteInventoryItemApi,
+  type InventoryQueryParams,
 } from "@/lib/api/inventory";
 import {
   getMenuItemsApi,
   saveMenuItemApi,
   updateMenuItemApi,
   deleteMenuItemApi,
+  type MenuQueryParams,
 } from "@/lib/api/menu";
 import {
   getSuppliersApi,
   saveSupplierApi,
   deleteSupplierApi,
+  type SuppliersQueryParams,
 } from "@/lib/api/suppliers";
+import { createNotificationApi } from "@/lib/api/notifications";
 
 export const UNITS = [
   "pc",
@@ -51,10 +56,33 @@ export function getStatus(item: InventoryItem): StockStatus {
 }
 
 type InventoryContextValue = {
+  // Paginated current tab slices
   items: InventoryItem[];
   suppliers: Supplier[];
   menuItems: MenuItem[];
+
+  // Unpaginated lookup lists (for dropdowns & cross-references)
+  allItems: InventoryItem[];
+  allSuppliers: Supplier[];
+
+  // Totals & facet counts from backend
+  itemsTotal: number;
+  itemsTotalAll: number;
+  statusCounts: Record<StockStatus, number>;
+  supplierCounts: Record<string, number>;
+  suppliersTotal: number;
+  suppliersTotalAll: number;
+  menuTotal: number;
+  menuTotalAll: number;
+
   loading: boolean;
+  tabLoading: boolean;
+
+  loadData: () => Promise<void>;
+  loadItemsPage: (params: InventoryQueryParams) => Promise<void>;
+  loadSuppliersPage: (params: SuppliersQueryParams) => Promise<void>;
+  loadMenuPage: (params: MenuQueryParams) => Promise<void>;
+
   addItem: (input: ItemInput) => Promise<void>;
   updateItem: (id: string, input: ItemInput) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
@@ -64,17 +92,94 @@ type InventoryContextValue = {
   addMenuItem: (item: MenuItem) => Promise<void>;
   updateMenuItem: (id: string, item: MenuItem) => Promise<void>;
   removeMenuItem: (id: string) => Promise<void>;
-  loadData: () => Promise<void>;
 };
 
 const InventoryContext = createContext<InventoryContextValue | null>(null);
 
 export function InventoryProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<InventoryItem[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [allItems, setAllItems] = useState<InventoryItem[]>([]);
+  const [itemsTotal, setItemsTotal] = useState(0);
+  const [itemsTotalAll, setItemsTotalAll] = useState(0);
+  const [statusCounts, setStatusCounts] = useState<Record<StockStatus, number>>(
+    {
+      "at-par": 0,
+      low: 0,
+      out: 0,
+    },
+  );
+  const [supplierCounts, setSupplierCounts] = useState<Record<string, number>>(
+    {},
+  );
 
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [allSuppliers, setAllSuppliers] = useState<Supplier[]>([]);
+  const [suppliersTotal, setSuppliersTotal] = useState(0);
+  const [suppliersTotalAll, setSuppliersTotalAll] = useState(0);
+
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [menuTotal, setMenuTotal] = useState(0);
+  const [menuTotalAll, setMenuTotalAll] = useState(0);
+
+  const [loading, setLoading] = useState(true);
+  const [tabLoading, setTabLoading] = useState(true);
+
+  // Track last query params per resource so mutations refresh the exact active page/filter
+  const lastItemsQuery = useRef<InventoryQueryParams>({
+    page: 1,
+    pageSize: 10,
+  });
+  const lastSuppliersQuery = useRef<SuppliersQueryParams>({
+    page: 1,
+    pageSize: 10,
+  });
+  const lastMenuQuery = useRef<MenuQueryParams>({ page: 1, pageSize: 10 });
+
+  const loadItemsPage = useCallback(async (params: InventoryQueryParams) => {
+    lastItemsQuery.current = params;
+    setTabLoading(true);
+    try {
+      const res = await getInventoryItemsApi(params);
+      setItems(res.items);
+      setItemsTotal(res.total);
+      setItemsTotalAll(res.totalAll);
+      setStatusCounts(res.statusCounts);
+      setSupplierCounts(res.supplierCounts);
+    } finally {
+      setTabLoading(false);
+    }
+  }, []);
+
+  const loadSuppliersPage = useCallback(
+    async (params: SuppliersQueryParams) => {
+      lastSuppliersQuery.current = params;
+      setTabLoading(true);
+      try {
+        const res = await getSuppliersApi(params);
+        setSuppliers(res.suppliers);
+        setSuppliersTotal(res.total);
+        setSuppliersTotalAll(res.totalAll);
+      } finally {
+        setTabLoading(false);
+      }
+    },
+    [],
+  );
+
+  const loadMenuPage = useCallback(async (params: MenuQueryParams) => {
+    lastMenuQuery.current = params;
+    setTabLoading(true);
+    try {
+      const res = await getMenuItemsApi(params);
+      setMenuItems(res.menu);
+      setMenuTotal(res.total);
+      setMenuTotalAll(res.totalAll);
+    } finally {
+      setTabLoading(false);
+    }
+  }, []);
+
+  // Used by HomeView (loads unpaginated overview) and initializes dropdown lookup lists
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -83,9 +188,21 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
         getMenuItemsApi(),
         getSuppliersApi(),
       ]);
-      setItems(invData);
-      setMenuItems(menuData);
-      setSuppliers(supplierData);
+      setItems(invData.items);
+      setAllItems(invData.items);
+      setItemsTotal(invData.total);
+      setItemsTotalAll(invData.totalAll);
+      setStatusCounts(invData.statusCounts);
+      setSupplierCounts(invData.supplierCounts);
+
+      setMenuItems(menuData.menu);
+      setMenuTotal(menuData.total);
+      setMenuTotalAll(menuData.totalAll);
+
+      setSuppliers(supplierData.suppliers);
+      setAllSuppliers(supplierData.suppliers);
+      setSuppliersTotal(supplierData.total);
+      setSuppliersTotalAll(supplierData.totalAll);
     } catch (err) {
       console.error("Failed to load inventory, menu, or supplier data", err);
     } finally {
@@ -93,63 +210,156 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const addItem = useCallback(async (input: ItemInput) => {
-    const newItem = await saveInventoryItemApi(input);
-    setItems((prev) => [...prev, newItem]);
+  const refreshLookups = useCallback(async () => {
+    const [invAll, supAll] = await Promise.all([
+      getInventoryItemsApi(),
+      getSuppliersApi(),
+    ]);
+    setAllItems(invAll.items);
+    setAllSuppliers(supAll.suppliers);
   }, []);
 
-  const updateItem = useCallback(async (id: string, input: ItemInput) => {
-    const updated = await saveInventoryItemApi({ ...input, id });
-    setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
-  }, []);
+  const addItem = useCallback(
+    async (input: ItemInput) => {
+      const newItem = await saveInventoryItemApi(input);
+      await Promise.all([
+        loadItemsPage(lastItemsQuery.current),
+        refreshLookups(),
+      ]);
 
-  const removeItem = useCallback(async (id: string) => {
-    await deleteInventoryItemApi(id);
-    setItems((prev) => prev.filter((i) => i.id !== id));
-  }, []);
+      const status = getStatus(newItem);
+      if (status === "low" || status === "out") {
+        await createNotificationApi({
+          type: "inventory_alert",
+          message: `New inventory item added: ${newItem.name} is ${STATUS_LABEL[status]}`,
+          title: "Inventory Alert",
+        });
+      } else {
+        await createNotificationApi({
+          type: "inventory_alert",
+          message: `New inventory item added: ${newItem.name}`,
+          title: "Inventory Update",
+        });
+      }
+    },
+    [loadItemsPage, refreshLookups],
+  );
+
+  const updateItem = useCallback(
+    async (id: string, input: ItemInput) => {
+      const updated = await saveInventoryItemApi({ ...input, id });
+      await Promise.all([
+        loadItemsPage(lastItemsQuery.current),
+        refreshLookups(),
+      ]);
+
+      const status = getStatus(updated);
+      if (status === "low" || status === "out") {
+        await createNotificationApi({
+          type: "inventory_alert",
+          message: `Inventory item updated: ${updated.name} is now ${STATUS_LABEL[status]}`,
+          title: "Inventory Alert",
+        });
+      } else {
+        await createNotificationApi({
+          type: "inventory_alert",
+          message: `Inventory item updated: ${updated.name} has been updated.`,
+          title: "Inventory Update",
+        });
+      }
+    },
+    [loadItemsPage, refreshLookups],
+  );
+
+  const removeItem = useCallback(
+    async (id: string) => {
+      await deleteInventoryItemApi(id);
+      await Promise.all([
+        loadItemsPage(lastItemsQuery.current),
+        refreshLookups(),
+      ]);
+    },
+    [loadItemsPage, refreshLookups],
+  );
 
   const addSupplier = useCallback(
     async (supplierData: Omit<Supplier, "id">) => {
-      const saved = await saveSupplierApi(supplierData);
-      setSuppliers((prev) => [...prev, saved]);
+      await saveSupplierApi(supplierData);
+      await Promise.all([
+        loadSuppliersPage(lastSuppliersQuery.current),
+        refreshLookups(),
+      ]);
     },
-    [],
+    [loadSuppliersPage, refreshLookups],
   );
 
   const updateSupplier = useCallback(
     async (id: string, supplierData: Partial<Supplier>) => {
-      const saved = await saveSupplierApi({ ...supplierData, id });
-      setSuppliers((prev) => prev.map((s) => (s.id === id ? saved : s)));
+      await saveSupplierApi({ ...supplierData, id });
+      await Promise.all([
+        loadSuppliersPage(lastSuppliersQuery.current),
+        refreshLookups(),
+      ]);
     },
-    [],
+    [loadSuppliersPage, refreshLookups],
   );
 
-  const removeSupplier = useCallback(async (id: string) => {
-    await deleteSupplierApi(id);
-    setSuppliers((prev) => prev.filter((s) => s.id !== id));
-  }, []);
+  const removeSupplier = useCallback(
+    async (id: string) => {
+      await deleteSupplierApi(id);
+      await Promise.all([
+        loadSuppliersPage(lastSuppliersQuery.current),
+        refreshLookups(),
+      ]);
+    },
+    [loadSuppliersPage, refreshLookups],
+  );
 
-  const addMenuItem = useCallback(async (item: MenuItem) => {
-    const saved = await saveMenuItemApi(item);
-    setMenuItems((prev) => [...prev, saved]);
-  }, []);
+  const addMenuItem = useCallback(
+    async (item: MenuItem) => {
+      await saveMenuItemApi(item);
+      await loadMenuPage(lastMenuQuery.current);
+    },
+    [loadMenuPage],
+  );
 
-  const updateMenuItem = useCallback(async (id: string, item: MenuItem) => {
-    const saved = await updateMenuItemApi({ ...item, id });
-    setMenuItems((prev) => prev.map((m) => (m.id === id ? saved : m)));
-  }, []);
+  const updateMenuItem = useCallback(
+    async (id: string, item: MenuItem) => {
+      await updateMenuItemApi({ ...item, id });
+      await loadMenuPage(lastMenuQuery.current);
+    },
+    [loadMenuPage],
+  );
 
-  const removeMenuItem = useCallback(async (id: string) => {
-    await deleteMenuItemApi(id);
-    setMenuItems((prev) => prev.filter((m) => m.id !== id));
-  }, []);
+  const removeMenuItem = useCallback(
+    async (id: string) => {
+      await deleteMenuItemApi(id);
+      await loadMenuPage(lastMenuQuery.current);
+    },
+    [loadMenuPage],
+  );
 
   const value = useMemo(
     () => ({
       items,
       suppliers,
       menuItems,
+      allItems,
+      allSuppliers,
+      itemsTotal,
+      itemsTotalAll,
+      statusCounts,
+      supplierCounts,
+      suppliersTotal,
+      suppliersTotalAll,
+      menuTotal,
+      menuTotalAll,
       loading,
+      tabLoading,
+      loadData,
+      loadItemsPage,
+      loadSuppliersPage,
+      loadMenuPage,
       addItem,
       updateItem,
       removeItem,
@@ -159,13 +369,27 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       addMenuItem,
       updateMenuItem,
       removeMenuItem,
-      loadData,
     }),
     [
       items,
       suppliers,
       menuItems,
+      allItems,
+      allSuppliers,
+      itemsTotal,
+      itemsTotalAll,
+      statusCounts,
+      supplierCounts,
+      suppliersTotal,
+      suppliersTotalAll,
+      menuTotal,
+      menuTotalAll,
       loading,
+      tabLoading,
+      loadData,
+      loadItemsPage,
+      loadSuppliersPage,
+      loadMenuPage,
       addItem,
       updateItem,
       removeItem,
@@ -175,7 +399,6 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       addMenuItem,
       updateMenuItem,
       removeMenuItem,
-      loadData,
     ],
   );
 

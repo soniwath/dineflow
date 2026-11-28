@@ -1,8 +1,5 @@
-import {
-  useReservations,
-  formatTime,
-  STATUS_LABEL,
-} from "@/stores/ReservationStore";
+import { useReservations, STATUS_LABEL } from "@/stores/ReservationStore";
+import { formatTime } from "@/lib/utils";
 import { useFloor } from "@/stores/FloorStore";
 import { Reservation, ReservationStatus } from "@/types/Reservation";
 import { cn } from "@/lib/utils";

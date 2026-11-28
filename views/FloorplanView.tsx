@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { STATUSES, STATUS_LABEL, useFloor } from "@/stores/FloorStore";
 import { FloorTable, TableInput, TableStatus, Zone } from "@/types/Floor";
 
+import FloorplanSkeleton from "@/components/floor/FloorplanSkeleton";
 import TableFormComponent from "@/components/floor/TableFormComponent";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Check, Loader2, Minus, Pencil, Plus, Users } from "lucide-react";
+import { Check, Minus, Pencil, Plus, Users } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /* Floor plan view                                                     */
@@ -206,12 +207,7 @@ export default function FloorPlanView() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center gap-2 text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-        <span>Loading floor plan...</span>
-      </div>
-    );
+    return <FloorplanSkeleton />;
   }
 
   return (

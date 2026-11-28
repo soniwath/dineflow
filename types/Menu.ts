@@ -3,7 +3,7 @@ export type MenuItem = {
   name: string;
   price: number;
   category: "Starters" | "Mains" | "Desserts" | "Beverages";
-  image?: string;
+  image?: File | string | null;
   desc?: string;
   ingredients?: MenuInventoryItem[];
 };
@@ -14,3 +14,5 @@ export type MenuInventoryItem = {
   inventoryItemId: string;
   quantityRequired: number;
 };
+
+export type MenuErrors = Record<string, string | undefined>;

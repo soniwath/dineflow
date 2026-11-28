@@ -4,6 +4,8 @@ import {
   SchedulingAccessError,
 } from "@/lib/auth/scheduling";
 import { recordStaffAttendance, SchedulingError } from "@/lib/db/scheduling";
+import { revalidateTag } from "next/cache";
+import { SCHEDULING_CACHE_TAG } from "@/app/api/scheduling/route";
 
 export async function POST(request: Request) {
   try {
@@ -19,6 +21,10 @@ export async function POST(request: Request) {
       );
     }
     const entry = await recordStaffAttendance({ ...body, staffId: user.id });
+
+    // Revalidate the scheduling cache so that the updated attendance is reflected in subsequent requests
+    revalidateTag(SCHEDULING_CACHE_TAG, { expire: 0 });
+
     return NextResponse.json(
       { entry },
       { status: entry.clockedOutAt === null ? 201 : 200 },

@@ -2,7 +2,12 @@ import "server-only";
 
 import { and, asc, desc, eq, gt, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/index";
-import { staffShifts, staffTimeEntries, users } from "@/lib/db/schema";
+import {
+  staffShifts,
+  staffTimeEntries,
+  users,
+  userRoles,
+} from "@/lib/db/schema";
 import {
   addCalendarDays,
   getRestaurantDate,
@@ -14,7 +19,7 @@ import type { ScheduleData, Shift, TimeEntry } from "@/types/Scheduling";
 export class SchedulingError extends Error {
   constructor(
     message: string,
-    public status: 400 | 409 = 400,
+    public status: 400 | 403 | 409 = 400,
   ) {
     super(message);
     this.name = "SchedulingError";
@@ -23,9 +28,24 @@ export class SchedulingError extends Error {
 
 export async function getStaffSchedule(
   requestedWeek: string | null,
-  viewer: Pick<typeof users.$inferSelect, "id" | "role">,
+  viewer: Pick<typeof users.$inferSelect, "id" | "roleId">,
 ): Promise<ScheduleData> {
-  const canManageSchedule = viewer.role === "manager" || viewer.role === "owner";
+  // get user roles
+  const [userRole] = await db
+    .select()
+    .from(userRoles)
+    .where(eq(userRoles.id, String(viewer.roleId)))
+    .limit(1);
+  const roleName = userRole?.name ?? "";
+
+  if (roleName !== "Manager" && roleName !== "Owner") {
+    throw new SchedulingError(
+      "You do not have permission to view the schedule.",
+      403,
+    );
+  }
+
+  const canManageSchedule = roleName === "Manager" || roleName === "Owner";
   const today = getRestaurantDate(new Date().toISOString());
   const weekStart = requestedWeek ?? getWeekStart(today);
   let weekFrom: Date;
@@ -54,7 +74,7 @@ export async function getStaffSchedule(
       .select({
         id: users.id,
         name: users.name,
-        role: users.role,
+        roleId: users.roleId,
         isActive: users.isActive,
       })
       .from(users)
@@ -76,7 +96,9 @@ export async function getStaffSchedule(
       .from(staffTimeEntries)
       .where(
         and(
-          canManageSchedule ? undefined : eq(staffTimeEntries.staffId, viewer.id),
+          canManageSchedule
+            ? undefined
+            : eq(staffTimeEntries.staffId, viewer.id),
           or(
             isNull(staffTimeEntries.clockedOutAt),
             and(
@@ -135,11 +157,15 @@ function parseTimestamp(value: unknown): Date {
 function isUuid(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      value,
+    )
   );
 }
 
-export async function recordStaffAttendance(input: unknown): Promise<TimeEntry> {
+export async function recordStaffAttendance(
+  input: unknown,
+): Promise<TimeEntry> {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new SchedulingError("An attendance action is required.");
   }
@@ -190,7 +216,10 @@ export async function recordStaffAttendance(input: unknown): Promise<TimeEntry> 
         );
       }
       // Both the ID and clock-in time come from database defaults.
-      [saved] = await tx.insert(staffTimeEntries).values({ staffId }).returning();
+      [saved] = await tx
+        .insert(staffTimeEntries)
+        .values({ staffId })
+        .returning();
     } else {
       if (!active || active.id !== entryId) {
         throw new SchedulingError(

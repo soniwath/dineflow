@@ -10,8 +10,9 @@ import {
   FormState,
   FormErrors,
 } from "@/types/Floor";
+import { createTableSchema } from "@/lib/validation/table";
 
-import FieldComponent from "@/components/floor/FieldComponent";
+import FieldComponent from "@/components/FieldComponent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -58,25 +59,28 @@ export default function TableFormComponent({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const number = Number(form.number);
-    const seats = Number(form.seats);
+    const result = createTableSchema({
+      tables,
+      zones,
+      currentId: table?.id,
+    }).safeParse(form);
 
-    const next: FormErrors = {};
-    if (!Number.isInteger(number) || number < 1)
-      next.number = "Enter a whole number, 1 or higher.";
-    else if (tables.some((t) => t.id !== table?.id && t.number === number))
-      next.number = `Table ${number} already exists.`;
-    if (!Number.isInteger(seats) || seats < 1 || seats > 12)
-      next.seats = "Enter between 1 and 12 seats.";
+    if (!result.success) {
+      const next: FormErrors = {};
+      for (const issue of result.error.issues) {
+        const key = issue.path[0] as keyof FormErrors;
+        next[key] ??= issue.message; // keep the first error per field
+      }
+      setErrors(next);
+      return;
+    }
 
-    setErrors(next);
-    if (Object.keys(next).length > 0) return;
-
+    setErrors({});
     onSubmit({
-      number,
-      seats,
-      shape: form.shape as TableShape,
-      zone: form.zone as Zone,
+      number: result.data.number,
+      seats: result.data.seats,
+      shape: result.data.shape,
+      zone: result.data.zone as Zone,
     });
   }
 

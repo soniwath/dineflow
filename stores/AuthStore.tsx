@@ -7,9 +7,7 @@ import { login as apiLogin, logout as apiLogout } from "@/lib/api/users"; // Imp
 /* ------------------------------------------------------------------ */
 /* Roles                                                             */
 /* ------------------------------------------------------------------ */
-export const ROLES = ["guest", "staff", "manager", "owner"] as const;
-
-export const ROLE_LABEL: Record<Role, string> = {
+export const ROLE_LABEL: Record<string, string> = {
   guest: "Guest",
   staff: "Staff",
   manager: "Manager",
@@ -17,7 +15,7 @@ export const ROLE_LABEL: Record<Role, string> = {
 };
 
 /** Where each role lands after signing in. Adjust to your routes. */
-export const ROLE_HOME: Record<Role, string> = {
+export const ROLE_HOME: Record<string, string> = {
   guest: "/order",
   staff: "/order",
   manager: "/",

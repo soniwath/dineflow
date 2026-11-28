@@ -4,3 +4,5 @@ export type Supplier = {
   phone: string;
   email: string;
 };
+
+export type SupplierErrors = Partial<Record<keyof Supplier, string>>;

@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import { unstable_cache, revalidateTag } from "next/cache";
 import { eq } from "drizzle-orm";
 const bcrypt = require("bcrypt");
-
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { UpdateUserBody } from "@/types/User";
 import { isAuthenticated } from "@/lib/auth/jwt";
+import { USERS_CACHE_TAG } from "@/app/api/users/route";
+import { SCHEDULING_CACHE_TAG } from "@/app/api/scheduling/route";
 
 function sanitizeUser(row: typeof users.$inferSelect) {
   // Remove sensitive fields like passwordHash before returning the user object
@@ -13,9 +15,24 @@ function sanitizeUser(row: typeof users.$inferSelect) {
   return safe;
 }
 
+const getCachedUserById = (id: string) =>
+  unstable_cache(
+    async () => {
+      const row = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, id))
+        .limit(1);
+
+      return row[0] ? sanitizeUser(row[0]) : null;
+    },
+    ["user-by-id", id],
+    { tags: [USERS_CACHE_TAG, `user-${id}`], revalidate: 60 },
+  )();
+
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   if (!(await isAuthenticated())) {
     return NextResponse.json(
@@ -24,22 +41,21 @@ export async function GET(
     );
   }
 
-  const row = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, params.id))
-    .limit(1);
+  const { id } = await params;
+  const user = await getCachedUserById(id);
 
-  if (!row[0]) {
+  if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  return NextResponse.json(sanitizeUser(row[0]));
+  return NextResponse.json(user, {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     if (!(await isAuthenticated())) {
@@ -57,7 +73,7 @@ export async function PATCH(
     if (body.name !== undefined) updateData.name = body.name.trim();
     if (body.email !== undefined)
       updateData.email = body.email.trim().toLowerCase();
-    if (body.role !== undefined) updateData.role = body.role;
+    if (body.roleId !== undefined) updateData.roleId = body.roleId;
     if (body.isActive !== undefined) updateData.isActive = body.isActive;
     if (body.lastLoginAt !== undefined) {
       updateData.lastLoginAt = body.lastLoginAt
@@ -78,6 +94,10 @@ export async function PATCH(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    revalidateTag(USERS_CACHE_TAG, { expire: 0 });
+    revalidateTag(`user-${id}`, { expire: 0 });
+    revalidateTag(SCHEDULING_CACHE_TAG, { expire: 0 });
+
     return NextResponse.json(sanitizeUser(updated[0]));
   } catch (error: any) {
     if (error?.code === "23505") {
@@ -96,7 +116,7 @@ export async function PATCH(
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   if (!(await isAuthenticated())) {
     return NextResponse.json(
@@ -116,6 +136,10 @@ export async function DELETE(
   if (!updated[0]) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
+
+  revalidateTag(USERS_CACHE_TAG, { expire: 0 });
+  revalidateTag(`user-${id}`, { expire: 0 });
+  revalidateTag(SCHEDULING_CACHE_TAG, { expire: 0 });
 
   return NextResponse.json({ success: true });
 }

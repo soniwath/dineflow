@@ -17,6 +17,8 @@ import {
   addReservationApi,
   updateReservationApi,
 } from "@/lib/api/reservations";
+import { createNotificationApi } from "@/lib/api/notifications";
+import { formatDate, formatTime } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
 /* Types & Helpers                                                     */
@@ -43,22 +45,6 @@ export const todayISO = () => toISO(new Date());
 export function addDays(iso: string, n: number) {
   const [y, m, d] = iso.split("-").map(Number);
   return toISO(new Date(y, m - 1, d + n));
-}
-
-export function formatDate(iso: string) {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-export function formatTime(hhmm: string) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const suffix = h >= 12 ? "PM" : "AM";
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
 const toMinutes = (hhmm: string) => {
@@ -151,6 +137,17 @@ export function ReservationProvider({ children }: { children: ReactNode }) {
     try {
       const saved = await addReservationApi(input);
       setReservations((prev) => prev.map((r) => (r.id === tempId ? saved : r)));
+
+      // Notify users when a new reservation is added
+      // This could be useful for staff to be aware of new bookings
+      await createNotificationApi({
+        title: "New Reservation",
+        message: `New reservation for ${input.name} on ${formatDate(
+          input.date,
+        )} at ${formatTime(input.time)}.`,
+        type: "reservation_update",
+      });
+
       return saved;
     } catch (error) {
       console.error("Failed to add reservation:", error);
@@ -186,6 +183,15 @@ export function ReservationProvider({ children }: { children: ReactNode }) {
       if (current.tableId && current.tableId !== tableId) {
         releaseIfUnheld(current.tableId, reservations);
       }
+
+      // notify users when reservation is updated
+      await createNotificationApi({
+        title: "Reservation Updated",
+        message: `Reservation for ${input.name} on ${formatDate(
+          input.date,
+        )} at ${formatTime(input.time)} has been updated.`,
+        type: "reservation_update",
+      });
     } catch (error) {
       console.error("Failed to update reservation:", error);
       loadData();
@@ -269,6 +275,18 @@ export function ReservationProvider({ children }: { children: ReactNode }) {
     try {
       await updateReservationApi({ id, status: reason });
       if (current.tableId) releaseIfUnheld(current.tableId, reservations);
+
+      // notify users when reservation is cancelled or marked as no-show
+      // This could be useful for staff to be aware of cancellations or no-shows
+      await createNotificationApi({
+        title: `Reservation ${reason === "cancelled" ? "Cancelled" : "No-show"}`,
+        message: `Reservation for ${current.name} on ${formatDate(
+          current.date,
+        )} at ${formatTime(current.time)} has been ${
+          reason === "cancelled" ? "cancelled" : "marked as no-show"
+        }.`,
+        type: "reservation_cancelled",
+      });
     } catch (error) {
       console.error("Failed to cancel reservation:", error);
       loadData();

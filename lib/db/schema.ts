@@ -19,13 +19,6 @@ import {
 import type { BillItem } from "@/types/Bill";
 import type { OrderInventoryDeduction } from "@/types/Order";
 
-/* ------------------------------------------------------------------ */
-/* Roles                                                               */
-/* ------------------------------------------------------------------ */
-// "guest" is deliberately not here: guests don't have an account, so they
-// are never stored. They only exist in the client auth state.
-export const userRole = pgEnum("user_role", ["staff", "manager", "owner"]);
-
 const timestamps = {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp({ withTimezone: true })
@@ -35,26 +28,39 @@ const timestamps = {
 };
 
 /* ------------------------------------------------------------------ */
+/* User Roles                                                               */
+/* ------------------------------------------------------------------ */
+export const userRoles = pgTable("roles", {
+  id: uuid().primaryKey().defaultRandom(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description").notNull().default(""),
+  ...timestamps,
+});
+
+/* ------------------------------------------------------------------ */
 /* Users                                                               */
 /* ------------------------------------------------------------------ */
 export const users = pgTable(
   "users",
   {
     id: uuid().primaryKey().defaultRandom(),
+    roleId: uuid("role_id").references(() => userRoles.id, {
+      onDelete: "set null",
+    }),
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 255 }).notNull(),
+    phone: varchar("phone", { length: 64 }).notNull().default(""),
     passwordHash: text("passwordHash").notNull(),
-    role: userRole().notNull().default("staff"),
     isActive: boolean().notNull().default(true),
     lastLoginAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
   (t) => [uniqueIndex("users_email_unique").on(sql`lower(${t.email})`)],
 );
+
 /* ------------------------------------------------------------------ */
 /* Staff Scheduling                                                     */
 /* ------------------------------------------------------------------ */
-
 export const staffShifts = pgTable(
   "staff_shifts",
   {
@@ -73,10 +79,7 @@ export const staffShifts = pgTable(
   },
   (t) => [
     index("staff_shifts_staff_start_idx").on(t.staffId, t.startsAt),
-    check(
-      "staff_shifts_time_order",
-      sql`${t.endsAt} > ${t.startsAt}`,
-    ),
+    check("staff_shifts_time_order", sql`${t.endsAt} > ${t.startsAt}`),
   ],
 );
 
@@ -97,10 +100,7 @@ export const staffTimeEntries = pgTable(
     }),
   },
   (t) => [
-    index("staff_time_entries_staff_in_idx").on(
-      t.staffId,
-      t.clockedInAt,
-    ),
+    index("staff_time_entries_staff_in_idx").on(t.staffId, t.clockedInAt),
     uniqueIndex("staff_time_entries_one_open_idx")
       .on(t.staffId)
       .where(sql`${t.clockedOutAt} IS NULL`),
@@ -111,7 +111,6 @@ export const staffTimeEntries = pgTable(
     ),
   ],
 );
-
 
 /* ------------------------------------------------------------------ */
 /* Menu Items                                                          */
@@ -212,7 +211,9 @@ export const orders = pgTable(
     tableNumber: integer("table_number").notNull(),
     status: orderStatusEnum().notNull().default("pending"),
     // NULL identifies older orders whose actual stock deductions are unknown.
-    inventoryDeductions: jsonb("inventory_deductions").$type<OrderInventoryDeduction[]>(),
+    inventoryDeductions: jsonb("inventory_deductions").$type<
+      OrderInventoryDeduction[]
+    >(),
     cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
     cancelledBy: uuid("cancelled_by").references(() => users.id),
     cancelReason: text("cancel_reason"),
@@ -331,4 +332,31 @@ export const reservations = pgTable("reservations", {
     .defaultNow()
     .notNull()
     .$onUpdate(() => sql`NOW()`),
+});
+
+/* ------------------------------------------------------------------ */
+/* Notification                                                        */
+/* ------------------------------------------------------------------ */
+export const notificationTypeEnum = pgEnum("notification_type", [
+  "order_update",
+  "order_cancelled",
+  "reservation_update",
+  "reservation_cancelled",
+  "inventory_alert",
+  "low_stock_alert",
+  "out_of_stock_alert",
+]);
+
+export const notificationStatusEnum = pgEnum("notification_status", [
+  "unread",
+  "read",
+]);
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  type: notificationTypeEnum().notNull(),
+  status: notificationStatusEnum().notNull().default("unread"),
+  ...timestamps,
 });

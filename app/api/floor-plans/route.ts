@@ -1,15 +1,30 @@
 import { NextResponse } from "next/server";
+import { unstable_cache, revalidateTag } from "next/cache";
 import { db } from "@/lib/db/index";
 import { floorTables } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { isAuthenticated } from "@/lib/auth/jwt";
+
+export const FLOOR_PLANS_CACHE_TAG = "floor-plans";
+
+const getCachedFloorTables = unstable_cache(
+  async () => db.select().from(floorTables),
+  ["floor-plans-list"],
+  { tags: [FLOOR_PLANS_CACHE_TAG], revalidate: 60 },
+);
 
 // GET /api/floor-plans - List all floor tables
 export async function GET() {
   try {
-    const allTables = await db.select().from(floorTables);
-    return NextResponse.json({ success: true, tables: allTables });
+    const allTables = await getCachedFloorTables();
+    return NextResponse.json(
+      { success: true, tables: allTables },
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+        },
+      },
+    );
   } catch (error: any) {
     return NextResponse.json(
       {
@@ -58,6 +73,8 @@ export async function POST(request: Request) {
       })
       .returning();
 
+    revalidateTag(FLOOR_PLANS_CACHE_TAG, { expire: 0 });
+
     return NextResponse.json({ success: true, table: newTable });
   } catch (error: any) {
     return NextResponse.json(
@@ -70,6 +87,7 @@ export async function POST(request: Request) {
   }
 }
 
+// PUT /api/floor-plans - Update a floor table
 export async function PUT(request: Request) {
   try {
     if (!(await isAuthenticated())) {
@@ -89,7 +107,6 @@ export async function PUT(request: Request) {
       );
     }
 
-    // Build clean update object, converting numeric fields safely
     const updateData: Record<string, any> = {
       updatedAt: sql`NOW()`,
     };
@@ -115,6 +132,8 @@ export async function PUT(request: Request) {
         { status: 404 },
       );
     }
+
+    revalidateTag(FLOOR_PLANS_CACHE_TAG, { expire: 0 });
 
     return NextResponse.json({ success: true, table: updatedTable });
   } catch (error: any) {
@@ -149,6 +168,8 @@ export async function DELETE(request: Request) {
     }
 
     await db.delete(floorTables).where(eq(floorTables.id, id));
+
+    revalidateTag(FLOOR_PLANS_CACHE_TAG, { expire: 0 });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

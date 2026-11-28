@@ -13,6 +13,7 @@ import {
   updateOrderStatusApi,
   cancelOrderApi,
 } from "@/lib/api/orders";
+import { createNotificationApi } from "@/lib/api/notifications";
 import type { MenuItem } from "@/types/Menu";
 import type { Tickets } from "@/types/Tickets";
 import type { KitchenTicket } from "@/types/KitchenTicket";
@@ -38,7 +39,7 @@ const OrderContext = createContext<OrderContextValue | null>(null);
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [menuList, setMenuList] = useState<MenuItem[]>([]);
   const [tickets, setTickets] = useState<Tickets>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<SavedOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,9 +112,13 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   const cancelKitchenOrder = useCallback(async (id: string, reason: string) => {
     const updated = await cancelOrderApi(id, reason);
-    setOrders((current) => current.map((order) => order.id === updated.id
-      ? { ...order, status: updated.status, canCancel: false }
-      : order));
+    setOrders((current) =>
+      current.map((order) =>
+        order.id === updated.id
+          ? { ...order, status: updated.status, canCancel: false }
+          : order,
+      ),
+    );
   }, []);
 
   const sendOrderToKitchen = useCallback(

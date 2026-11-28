@@ -7,7 +7,7 @@ import { FieldErrors } from "@/types/Auth";
 
 // import DemoHintComponent from "@/components/auth/DemoHintComponent";
 import PasswordInputComponent from "@/components/auth/PasswordInputComponent";
-import FieldComponent from "@/components/auth/FieldComponent";
+import FieldComponent from "@/components/FieldComponent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ROLE_HOME, useAuth } from "@/stores/AuthStore";
@@ -40,7 +40,7 @@ export default function LoginFormComponent() {
     setLoading(true);
     const result = await login({ email: value, password });
     if (result.ok) {
-      router.push(ROLE_HOME[result.user.role]);
+      router.push(ROLE_HOME[result.user.role.toLowerCase()]);
       return; // keep the loading state while navigating
     }
     setLoading(false);
@@ -57,10 +57,7 @@ export default function LoginFormComponent() {
     <div className="space-y-4">
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {formError && (
-          <div
-            role="alert"
-            className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          >
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {formError}
           </div>
         )}

@@ -1,26 +1,29 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { cn, formatDate, formatTime } from "@/lib/utils";
 import {
   FilterOption,
-  UserRole,
   UserStatus,
-  CreateUserBody,
-  UpdateUserBody,
   User,
+  UpdateUserBody,
+  CreateUserBody,
+  UserErrors,
 } from "@/types/User";
 import {
   useUsersStore,
   STATUS_LABEL,
-  ROLE_LABEL,
   statusBadge,
   roleBadge,
   AVATAR_COLORS,
   getInitials,
 } from "@/stores/UserStore";
+import { createUserSchema } from "@/lib/validation/user";
 
+import UserManagementSkeleton from "@/components/user/UserManagementSkeleton";
 import FilterPopoverComponent from "@/components/user/FilterPopoverComponent";
 import UserActionsComponent from "@/components/user/UserActionsComponent";
+import UserFormComponent from "@/components/user/UserFormComponent";
+
 import StatusBadgeComponent from "@/components/StatusBadgeComponent";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -46,8 +49,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LayoutGrid, List, Plus, Search } from "lucide-react";
 
 export default function UserManagementView() {
-  const { users, loading, loadData, addUser, updateUserRecord, removeUser } =
-    useUsersStore();
+  const {
+    users,
+    userRoles,
+    loading,
+    loadData,
+    addUser,
+    updateUserRecord,
+    removeUser,
+  } = useUsersStore();
 
   const [tab, setTab] = useState("users");
   const [view, setView] = useState<"list" | "card">("list");
@@ -56,6 +66,7 @@ export default function UserManagementView() {
   const [roleFilter, setRoleFilter] = useState<string[]>([]);
   const [page, setPage] = useState(1);
 
+  const [userErrors, setUserErrors] = useState<UserErrors>({});
   const [formOpen, setFormOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [editing, setEditing] = useState<User | null>(null);
@@ -71,8 +82,6 @@ export default function UserManagementView() {
       role: roleFilter.length > 0 ? roleFilter.join(",") : undefined,
     };
   }, [query, statusFilter, roleFilter]);
-
-  let searchDebounce: any = null;
 
   const PAGE_SIZE = 10;
 
@@ -110,19 +119,27 @@ export default function UserManagementView() {
     },
   ];
 
-  const roleOptions: FilterOption[] = (
-    ["owner", "manager", "staff"] as UserRole[]
-  ).map((role) => ({
-    value: role,
-    label: ROLE_LABEL[role],
-    count: users.filter((user) => user.role === role).length,
+  const DOT_COLORS: Record<string, string> = {
+    owner: "bg-violet-500",
+    manager: "bg-cyan-500",
+  };
+  const FALLBACK_DOTS = [
+    "bg-emerald-500",
+    "bg-amber-500",
+    "bg-rose-500",
+    "bg-slate-500",
+  ];
+  const roleOptions: FilterOption[] = userRoles.map((role, i) => ({
+    value: role.id, // the API filters by roleId, so use the id
+    label: role.name,
+    count: users.filter((user) => user.roleId === role.id).length,
     dot:
-      role === "owner"
-        ? "bg-violet-500"
-        : role === "manager"
-          ? "bg-cyan-500"
-          : "bg-slate-500",
+      DOT_COLORS[role.name.toLowerCase()] ??
+      FALLBACK_DOTS[i % FALLBACK_DOTS.length],
   }));
+  const getRole = (user: any) => {
+    return userRoles.find((role) => role.id === user.roleId)?.name ?? "N/A";
+  };
 
   const rows = useMemo(() => {
     return users
@@ -131,7 +148,8 @@ export default function UserManagementView() {
           if (statusFilter.includes("active") && !user.isActive) return false;
           if (statusFilter.includes("disabled") && user.isActive) return false;
         }
-        if (roleFilter.length && !roleFilter.includes(user.role)) return false;
+        if (roleFilter.length && !roleFilter.includes(user.roleId))
+          return false;
         return true;
       })
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -154,38 +172,59 @@ export default function UserManagementView() {
   const handleSubmit = async (input: {
     name: string;
     email: string;
-    role: UserRole;
+    roleId: string;
     status: UserStatus;
+    phone: string;
     password?: string;
   }) => {
     try {
       setSaving(true);
       setError(null);
 
+      const result = createUserSchema().safeParse(input);
+
+      if (!result.success) {
+        const next: UserErrors = {};
+        for (const issue of result.error.issues) {
+          const key = issue.path[0] as keyof UserErrors;
+          next[key] ??= issue.message; // keep the first error per field
+        }
+
+        setUserErrors(next);
+        return;
+      }
+
+      setUserErrors({});
+
       if (editing) {
         const payload: UpdateUserBody = {
-          name: input.name,
-          email: input.email,
-          role: input.role as any,
-          isActive: input.status === "active",
-          ...(input.password?.trim()
-            ? { password: input.password.trim() }
-            : {}),
-        } as any;
+          name: result.data.name,
+          email: result.data.email,
+          phone: result.data.phone,
+          roleId: result.data.roleId,
+          isActive: result.data.isActive,
+        };
+
+        if (result.data.password) {
+          payload.password = result.data.password;
+        }
+
         await updateUserRecord(editing.id, payload);
       } else {
         const payload: CreateUserBody = {
-          name: input.name,
-          email: input.email,
-          role: input.role as any,
-          isActive: input.status === "active",
-          password: input.password?.trim(),
-        } as any;
+          name: result.data.name,
+          email: result.data.email,
+          roleId: result.data.roleId,
+          phone: result.data.phone,
+          isActive: result.data.isActive,
+          password: result.data.password ?? "",
+        };
+
         await addUser(payload);
       }
 
       setFormOpen(false);
-      await loadData(params);
+      await loadData(params, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save user");
     } finally {
@@ -201,7 +240,7 @@ export default function UserManagementView() {
       await removeUser(deleting.id);
       setDeleteOpen(false);
       setDeleting(null);
-      await loadData(params);
+      await loadData(params, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete user");
     } finally {
@@ -216,27 +255,47 @@ export default function UserManagementView() {
     setPage(1);
   };
 
+  const formatDateTime = (iso: string | null) => {
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return `${formatDate(date.toISOString().split("T")[0])} ${formatTime(
+      date.toTimeString().split(" ")[0].slice(0, 5),
+    )}`;
+  };
+
+  const onFirstLoad = useRef(true);
+
+  // side effects
   useEffect(() => {
-    // Clear the previous timeout if user types again within 300ms
-    if (searchDebounce) {
-      clearTimeout(searchDebounce);
+    if (onFirstLoad.current) {
+      onFirstLoad.current = false;
+      return;
     }
 
-    searchDebounce = setTimeout(() => {
-      loadData(params);
+    if (
+      params.q === undefined &&
+      params.status === undefined &&
+      params.role === undefined
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      loadData(params, true);
     }, 300);
 
-    // Cleanup timeout on unmount or when query changes
-    return () => {
-      if (searchDebounce) {
-        clearTimeout(searchDebounce);
-      }
-    };
-  }, [query]);
+    return () => clearTimeout(timer);
+  }, [query, statusFilter, roleFilter]);
 
   useEffect(() => {
     loadData(params);
-  }, [statusFilter, roleFilter]);
+  }, []);
+
+  if (loading) {
+    return <UserManagementSkeleton />;
+  }
 
   return (
     <div className="space-y-4">
@@ -262,7 +321,7 @@ export default function UserManagementView() {
             >
               Roles
               <span className="text-xs tabular-nums text-muted-foreground">
-                {Object.keys(ROLE_LABEL).length}
+                {userRoles.length}
               </span>
             </TabsTrigger>
           </TabsList>
@@ -305,6 +364,7 @@ export default function UserManagementView() {
                 setPage(1);
               }}
             />
+
             <FilterPopoverComponent
               title="Role"
               options={roleOptions}
@@ -363,11 +423,7 @@ export default function UserManagementView() {
             </div>
           </div>
 
-          {loading ? (
-            <div className="rounded-xl border p-6 text-sm text-muted-foreground">
-              Loading users...
-            </div>
-          ) : rows.length === 0 ? (
+          {rows.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-10 text-center">
               <div className="space-y-1">
                 <p className="text-sm font-medium">
@@ -440,10 +496,10 @@ export default function UserManagementView() {
                         <Badge
                           className={cn(
                             "rounded-full font-normal",
-                            roleBadge[user.role],
+                            roleBadge[getRole(user).toLowerCase()],
                           )}
                         >
-                          {ROLE_LABEL[user.role]}
+                          {getRole(user)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -453,7 +509,9 @@ export default function UserManagementView() {
                           statusBadge={statusBadge}
                         />
                       </TableCell>
-                      <TableCell>{user.lastLoginAt ?? "N/A"}</TableCell>
+                      <TableCell>
+                        {formatDateTime(user.lastLoginAt) ?? "N/A"}
+                      </TableCell>
                       <TableCell>
                         <UserActionsComponent
                           user={user}
@@ -512,10 +570,10 @@ export default function UserManagementView() {
                       <Badge
                         className={cn(
                           "rounded-full font-normal",
-                          roleBadge[user.role],
+                          roleBadge[getRole(user).toLowerCase()],
                         )}
                       >
-                        {ROLE_LABEL[user.role]}
+                        {getRole(user)}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
                         {user.lastLoginAt ?? "N/A"}
@@ -587,13 +645,13 @@ export default function UserManagementView() {
 
         <TabsContent value="roles" className="mt-0">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {(["owner", "manager", "staff"] as UserRole[]).map((role) => {
-              const members = users.filter((user) => user.role === role);
+            {userRoles.map((role) => {
+              const members = users.filter((user) => user.roleId === role.id);
               const active = members.filter((user) => user.isActive).length;
 
               return (
                 <article
-                  key={role}
+                  key={role.id}
                   className="flex flex-col gap-3 rounded-xl border bg-card p-4"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -601,28 +659,36 @@ export default function UserManagementView() {
                       <div
                         className={cn(
                           "size-2.5 rounded-full",
-                          role === "owner"
-                            ? "bg-violet-500"
-                            : role === "manager"
-                              ? "bg-cyan-500"
-                              : role === "staff"
-                                ? "bg-amber-500"
-                                : "bg-slate-500",
+                          DOT_COLORS[role.name.toLowerCase()] ??
+                            FALLBACK_DOTS[
+                              Math.abs(
+                                role.name
+                                  .split("")
+                                  .reduce(
+                                    (sum, char) => sum + char.charCodeAt(0),
+                                    0,
+                                  ),
+                              ) % FALLBACK_DOTS.length
+                            ],
                         )}
                       />
-                      <h3 className="text-sm font-medium">
-                        {ROLE_LABEL[role]}
-                      </h3>
+                      <h3 className="text-sm font-medium">{role.name}</h3>
                     </div>
                     <Badge
                       className={cn(
                         "rounded-full font-normal",
-                        roleBadge[role],
+                        roleBadge[role.name.toLowerCase()],
                       )}
                     >
                       {active} active
                     </Badge>
                   </div>
+
+                  {role.description && (
+                    <p className="text-sm text-muted-foreground">
+                      {role.description}
+                    </p>
+                  )}
 
                   <p className="text-sm text-muted-foreground">
                     {members.length}{" "}
@@ -634,7 +700,7 @@ export default function UserManagementView() {
                     size="sm"
                     className="mt-auto self-start"
                     onClick={() => {
-                      setRoleFilter([role]);
+                      setRoleFilter([role.id]);
                       setStatusFilter([]);
                       setQuery("");
                       setPage(1);
@@ -650,6 +716,7 @@ export default function UserManagementView() {
         </TabsContent>
       </Tabs>
 
+      {/* Create or edit user dialog */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader className="border-b pb-4">
@@ -666,12 +733,15 @@ export default function UserManagementView() {
           <UserFormComponent
             key={formKey}
             user={editing}
+            userRoles={userRoles}
             onSubmit={handleSubmit}
             saving={saving}
+            errors={userErrors}
           />
         </DialogContent>
       </Dialog>
 
+      {/* Delete user dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -694,113 +764,6 @@ export default function UserManagementView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function UserFormComponent({
-  user,
-  onSubmit,
-  saving,
-}: {
-  user: User | null;
-  onSubmit: (input: {
-    name: string;
-    email: string;
-    role: UserRole;
-    status: UserStatus;
-    password?: string;
-  }) => void;
-  saving: boolean;
-}) {
-  const [name, setName] = useState(user?.name ?? "");
-  const [email, setEmail] = useState(user?.email ?? "");
-  const [role, setRole] = useState<UserRole>(user?.role ?? "staff");
-  const [status, setStatus] = useState<UserStatus>(
-    user?.isActive ? "active" : "disabled",
-  );
-  const [password, setPassword] = useState("");
-
-  return (
-    <div className="space-y-4 py-2">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Full name</label>
-          <Input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Email</label>
-          <Input
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Role</label>
-          <select
-            value={role}
-            onChange={(event) => setRole(event.target.value as UserRole)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            <option value="owner">Owner</option>
-            <option value="manager">Manager</option>
-            <option value="staff">Staff</option>
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium">Status</label>
-          <select
-            value={status}
-            onChange={(event) => setStatus(event.target.value as UserStatus)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          >
-            <option value="active">Active</option>
-            <option value="disabled">Disabled</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-medium">
-            Password {user ? "(optional)" : ""}
-          </label>
-          <Input
-            type="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="flex justify-end gap-2 pt-2">
-        <DialogClose render={<Button type="button" variant="outline" />}>
-          Cancel
-        </DialogClose>
-        <Button
-          disabled={saving}
-          onClick={() =>
-            onSubmit({
-              name: name.trim(),
-              email: email.trim(),
-              role,
-              status,
-              password: password.trim() || undefined,
-            })
-          }
-        >
-          {saving ? "Saving..." : user ? "Save changes" : "Add user"}
-        </Button>
-      </div>
     </div>
   );
 }

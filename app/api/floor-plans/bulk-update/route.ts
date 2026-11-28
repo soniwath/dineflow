@@ -3,6 +3,8 @@ import { db } from "@/lib/db/index";
 import { floorTables } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { isAuthenticated } from "@/lib/auth/jwt";
+import { revalidateTag } from "next/cache";
+import { FLOOR_PLANS_CACHE_TAG } from "@/app/api/floor-plans/route";
 
 export async function PUT(request: Request) {
   try {
@@ -64,6 +66,9 @@ export async function PUT(request: Request) {
 
       return results;
     });
+
+    // Revalidate the cache for floor plans after updates
+    revalidateTag(FLOOR_PLANS_CACHE_TAG, { expire: 0 });
 
     return NextResponse.json({ success: true, tables: updatedTables });
   } catch (error: any) {

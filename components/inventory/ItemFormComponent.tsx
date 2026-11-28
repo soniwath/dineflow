@@ -6,8 +6,9 @@ import {
   FormState,
   FormErrors,
 } from "@/types/Inventory";
+import { createItemSchema } from "@/lib/validation/item";
 
-import FieldComponent from "@/components/inventory/FieldComponent";
+import FieldComponent from "@/components/FieldComponent";
 import { Button } from "@/components/ui/button";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -55,38 +56,24 @@ export default function ItemFormComponent({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const result = createItemSchema({
+      items,
+      suppliers,
+      currentId: item?.id,
+    }).safeParse(form);
 
-    const name = form.name.trim();
-    const onHand = form.onHand.trim() === "" ? 0 : Number(form.onHand);
-    const par = form.par.trim() === "" ? 0 : Number(form.par);
-    const lowAt = form.lowAt.trim() === "" ? 0 : Number(form.lowAt);
+    if (!result.success) {
+      const next: FormErrors = {};
+      for (const issue of result.error.issues) {
+        const key = issue.path[0] as keyof FormErrors;
+        next[key] ??= issue.message; // keep the first error per field
+      }
+      setErrors(next);
+      return;
+    }
 
-    const next: FormErrors = {};
-    if (!name) next.name = "Enter an ingredient name.";
-    else if (
-      items.some(
-        (i) => i.id !== item?.id && i.name.toLowerCase() === name.toLowerCase(),
-      )
-    )
-      next.name = "An item with this name already exists.";
-    if (Number.isNaN(onHand) || onHand < 0) next.onHand = "Enter 0 or more.";
-    if (!(par > 0)) next.par = "Enter a par level above 0.";
-    if (Number.isNaN(lowAt) || lowAt < 0) next.lowAt = "Enter 0 or more.";
-    else if (par > 0 && lowAt > par) next.lowAt = "Can't be higher than par.";
-    if (!form.supplierId) next.supplierId = "Choose a supplier.";
-
-    setErrors(next);
-    if (Object.keys(next).length > 0) return;
-
-    onSubmit({
-      name,
-      unit: form.unit,
-      onHand,
-      par,
-      lowAt,
-      expires: form.expires || null,
-      supplierId: form.supplierId,
-    });
+    setErrors({});
+    onSubmit(result.data);
   }
 
   return (

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useFloor } from "@/stores/FloorStore";
-import { useReservations, formatTime } from "@/stores/ReservationStore";
+import { useReservations } from "@/stores/ReservationStore";
+import { formatTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Reservation } from "@/types/Reservation";
 

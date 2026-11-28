@@ -3,14 +3,15 @@ import { User, UserRole, CreateUserBody, UpdateUserBody } from "@/types/User";
 import { Credentials } from "@/types/Auth";
 
 function mapApiUser(user: User): User {
-  const role = (user as any).role as UserRole;
+  const role = (user as any).role;
   const isActive = Boolean((user as any).isActive);
   return {
     id: String((user as any).id),
     name: String((user as any).name ?? ""),
     email: String((user as any).email ?? ""),
-    role: role,
     lastLoginAt: String((user as any).lastLoginAt ?? "—"),
+    roleId: String((user as any).roleId ?? ""),
+    role: role,
     updatedAt: String(
       (user as any).updatedAt ?? new Date().toISOString().slice(0, 10),
     ),
@@ -19,6 +20,12 @@ function mapApiUser(user: User): User {
     ),
     isActive,
   };
+}
+
+export async function getUserRoles(): Promise<UserRole[]> {
+  const res = await fetch("/api/roles", { cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch user roles");
+  return res.json();
 }
 
 export async function getUsers(params: any): Promise<User[]> {
@@ -64,7 +71,7 @@ export async function updateUser(id: string, input: UpdateUserBody) {
 export async function deleteUser(id: string) {
   const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
   if (!res.ok)
-    throw new Error((await res.json()).error ?? "Failed to delete user");
+    throw new Error((await res.json()).message ?? "Failed to delete user");
   return res.json();
 }
 
@@ -74,7 +81,7 @@ export async function login(input: Credentials) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Failed to login");
+  if (!res.ok) throw new Error((await res.json()).message ?? "Failed to login");
   return res.json();
 }
 

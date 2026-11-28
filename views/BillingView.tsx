@@ -6,6 +6,7 @@ import { getBillsApi, recordBillPaymentApi } from "@/lib/api/bills";
 import { getGuestBills, splitBillEvenly } from "@/lib/billing";
 import { cn, money } from "@/lib/utils";
 import type { Bill, BillItem, RecordBillPaymentInput } from "@/types/Bill";
+import BillingSkeleton from "@/components/BillingSkeleton";
 
 function BillLines({ items }: { items: BillItem[] }) {
   return (
@@ -317,6 +318,10 @@ export default function BillingView() {
     }
   }
 
+  if (loading) {
+    return <BillingSkeleton />;
+  }
+
   return (
     <section
       aria-label="Billing"
@@ -342,10 +347,10 @@ export default function BillingView() {
         <Button
           type="button"
           variant="outline"
-          disabled={loading || saving}
+          disabled={saving}
           onClick={() => void loadBills()}
         >
-          {loading ? "Loading bills…" : "Refresh bills"}
+          Refresh bills
         </Button>
       </header>
       {error && (
@@ -388,12 +393,11 @@ export default function BillingView() {
           <BillDetails
             key={bill.id + ":" + bill.orderIds.join(",")}
             bill={bill}
-            busy={saving || loading}
+            busy={saving}
             onPay={markAsPaid}
           />
         </div>
       ) : (
-        !loading &&
         !error && (
           <p
             role="status"

@@ -1,3 +1,4 @@
+import { seedUserRoles } from "@/lib/db/seeders/userRoles.seed";
 import { seedUsers } from "@/lib/db/seeders/users.seed";
 import { seedMenuItems } from "@/lib/db/seeders/menu.seed";
 import { seedInventory } from "@/lib/db/seeders/inventory.seed";
@@ -7,6 +8,7 @@ import { seedReservations } from "@/lib/db/seeders/reservation.seed";
 async function main() {
   console.log("🚀 Starting database seeding workflow...");
 
+  await seedUserRoles();
   await seedUsers();
   await seedInventory();
   await seedMenuItems();

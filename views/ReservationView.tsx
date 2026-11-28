@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { todayISO, useReservations } from "@/stores/ReservationStore";
 
 import ReservationsBoardComponent from "@/components/reservation/ReservationsBoardComponent";
-import { Loader2 } from "lucide-react";
+import ReservationsSkeleton from "@/components/reservation/ReservationsSkeleton";
 
 /* ------------------------------------------------------------------ */
 /* Page                                                                */
@@ -20,12 +20,7 @@ export default function ReservationsView() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center gap-2 text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-        <span>Loading reservations...</span>
-      </div>
-    );
+    return <ReservationsSkeleton />;
   }
 
   return <ReservationsBoardComponent today={today} />;

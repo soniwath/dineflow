@@ -6,6 +6,7 @@ import { ChevronDown, Download, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import AnalyticsSkeleton from "@/components/analytics/AnalyticsSkeleton";
 import SalesChartComponent from "@/components/analytics/SalesChartComponent";
 import HomeStatCardComponent from "@/components/HomeStatCardComponent";
 import MenuPerformanceCardComponent from "@/components/analytics/MenuPerformanceCardComponent";
@@ -64,7 +65,8 @@ export default function AnalyticsView({ initialNow }: { initialNow: string }) {
     : "";
 
   useEffect(() => {
-    const updateDate = () => setToday(getRestaurantDate(new Date().toISOString()));
+    const updateDate = () =>
+      setToday(getRestaurantDate(new Date().toISOString()));
     const initialTick = window.setTimeout(updateDate, 0);
     const interval = window.setInterval(updateDate, 30_000);
     return () => {
@@ -85,7 +87,10 @@ export default function AnalyticsView({ initialNow }: { initialNow: string }) {
           setResult({
             key: requestKey,
             data: null,
-            error: cause instanceof Error ? cause.message : "Could not load Analytics.",
+            error:
+              cause instanceof Error
+                ? cause.message
+                : "Could not load Analytics.",
           });
         }
       },
@@ -130,19 +135,19 @@ export default function AnalyticsView({ initialNow }: { initialNow: string }) {
     : "in the previous period";
   const noComparisonNote = "Previous-period comparison unavailable.";
 
+  if (loading) {
+    return <AnalyticsSkeleton />;
+  }
   return (
-    <section
-      className="space-y-6"
-      aria-labelledby="analytics-heading"
-      aria-busy={loading}
-    >
+    <section className="space-y-6" aria-labelledby="analytics-heading">
       <header className="space-y-1">
         <h1 id="analytics-heading" className="text-2xl font-semibold">
           Analytics
         </h1>
         <p className="text-sm text-muted-foreground">
           Sales from recorded payments, dated in Asia/Phnom_Penh (UTC+07:00).
-          Average ticket uses paid orders; covers use the guest count saved on each receipt.
+          Average ticket uses paid orders; covers use the guest count saved on
+          each receipt.
         </p>
       </header>
       <div className="flex flex-wrap justify-end gap-2">
@@ -164,14 +169,13 @@ export default function AnalyticsView({ initialNow }: { initialNow: string }) {
         <Button
           type="button"
           variant="outline"
-          disabled={loading}
           onClick={() => setRefreshCount((count) => count + 1)}
         >
           <RefreshCw aria-hidden="true" /> Refresh
         </Button>
         <Menu.Root>
           <Menu.Trigger
-            disabled={!analyticsData || loading || hasPendingDates || Boolean(dateError)}
+            disabled={!analyticsData || hasPendingDates || Boolean(dateError)}
             render={<Button type="button" variant="outline" />}
           >
             <Download aria-hidden="true" />
@@ -252,8 +256,8 @@ export default function AnalyticsView({ initialNow }: { initialNow: string }) {
             <Button type="submit">Apply dates</Button>
           </div>
           <p id="analytics-date-help" className="text-xs text-muted-foreground">
-            Both dates are included. Choose up to 366 days ending today or earlier.
-            Comparisons use the preceding period of the same length.
+            Both dates are included. Choose up to 366 days ending today or
+            earlier. Comparisons use the preceding period of the same length.
           </p>
           {dateError && (
             <p
@@ -272,14 +276,11 @@ export default function AnalyticsView({ initialNow }: { initialNow: string }) {
         </form>
       )}
 
-      {loading && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Loading Analytics…
-        </p>
-      )}
       {loadError && (
         <div className="space-y-3">
-          <p role="alert" className="text-sm text-destructive">{loadError}</p>
+          <p role="alert" className="text-sm text-destructive">
+            {loadError}
+          </p>
           <Button
             type="button"
             variant="outline"
@@ -293,7 +294,10 @@ export default function AnalyticsView({ initialNow }: { initialNow: string }) {
         <>
           <p className="text-sm text-muted-foreground">{periodLabel}</p>
           {analyticsData.summary.totalOrders === 0 && (
-            <p role="status" className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            <p
+              role="status"
+              className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground"
+            >
               No payments recorded for this period.
             </p>
           )}

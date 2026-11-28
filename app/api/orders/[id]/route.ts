@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { OrderAccessError, requireOrderStaff } from "@/lib/auth/orders";
-import { cancelOrder, OrderCancellationError } from "@/lib/db/order-cancellation";
+import {
+  cancelOrder,
+  OrderCancellationError,
+} from "@/lib/db/order-cancellation";
 import { db } from "@/lib/db/index";
 import { orders } from "@/lib/db/schema";
+import { revalidateTag } from "next/cache";
+import { ORDERS_CACHE_TAG } from "@/app/api/orders/route";
 
 const previousStatus = {
   preparing: "pending",
@@ -20,7 +25,9 @@ export async function PATCH(
 
     const { id } = await params;
     if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        id,
+      )
     ) {
       return NextResponse.json(
         { success: false, message: "Invalid order ID format" },
@@ -36,7 +43,11 @@ export async function PATCH(
       return NextResponse.json({ success: true, order });
     }
 
-    if (status !== "preparing" && status !== "ready" && status !== "completed") {
+    if (
+      status !== "preparing" &&
+      status !== "ready" &&
+      status !== "completed"
+    ) {
       return NextResponse.json(
         { success: false, message: "Invalid status value" },
         { status: 400 },
@@ -46,9 +57,7 @@ export async function PATCH(
     const [updated] = await db
       .update(orders)
       .set({ status })
-      .where(
-        and(eq(orders.id, id), eq(orders.status, previousStatus[status])),
-      )
+      .where(and(eq(orders.id, id), eq(orders.status, previousStatus[status])))
       .returning({ id: orders.id, status: orders.status });
 
     if (!updated) {
@@ -57,6 +66,9 @@ export async function PATCH(
         .from(orders)
         .where(eq(orders.id, id))
         .limit(1);
+
+      // Revalidate the orders cache tag to ensure clients get the latest data
+      revalidateTag(ORDERS_CACHE_TAG, { expire: 0 });
 
       return NextResponse.json(
         {
@@ -69,9 +81,15 @@ export async function PATCH(
       );
     }
 
+    // Revalidate the orders cache tag to ensure clients get the latest data
+    revalidateTag(ORDERS_CACHE_TAG, { expire: 0 });
+
     return NextResponse.json({ success: true, order: updated });
   } catch (error) {
-    if (error instanceof OrderAccessError || error instanceof OrderCancellationError) {
+    if (
+      error instanceof OrderAccessError ||
+      error instanceof OrderCancellationError
+    ) {
       return NextResponse.json(
         { success: false, message: error.message },
         { status: error.status },
