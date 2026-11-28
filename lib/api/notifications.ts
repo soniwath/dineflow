@@ -1,10 +1,11 @@
 import { Notification, NotificationType } from "@/types/Notification";
 
-export async function getNotifications(): Promise<{
+export async function getNotificationsApi(params?: any): Promise<{
   notifications: Notification[];
   unreadCount: number;
 }> {
-  const res = await fetch("/api/notifications", {
+  const { limit } = params || { limit: 10 };
+  const res = await fetch(`/api/notifications?limit=${limit}`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
   });
@@ -15,7 +16,7 @@ export async function getNotifications(): Promise<{
   return data;
 }
 
-export async function createNotification(input: {
+export async function createNotificationApi(input: {
   title: string;
   message: string;
   type: NotificationType;
@@ -30,7 +31,7 @@ export async function createNotification(input: {
   return data.notification as Notification;
 }
 
-export async function markNotificationAsRead(id: string): Promise<void> {
+export async function markNotificationAsReadApi(id: string): Promise<void> {
   const res = await fetch(`/api/notifications/${id}`, {
     method: "PATCH",
   });
@@ -38,7 +39,7 @@ export async function markNotificationAsRead(id: string): Promise<void> {
   if (!res.ok) throw new Error("Failed to mark notification as read");
 }
 
-export async function markAllNotificationsAsRead(): Promise<void> {
+export async function markAllNotificationsAsReadApi(): Promise<void> {
   const res = await fetch("/api/notifications", {
     method: "PATCH",
   });

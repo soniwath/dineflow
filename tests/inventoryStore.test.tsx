@@ -5,7 +5,7 @@ import {
   InventoryProvider,
   useInventory,
   getStatus,
-} from "@/stores/InventoryStore"; // Update path to your provider file
+} from "@/stores/InventoryStore";
 import {
   getInventoryItemsApi,
   saveInventoryItemApi,
@@ -22,11 +22,11 @@ import {
   saveSupplierApi,
   deleteSupplierApi,
 } from "@/lib/api/suppliers";
+import { createNotificationApi } from "@/lib/api/notifications";
 import { InventoryItem, ItemInput } from "@/types/Inventory";
 import { Supplier } from "@/types/Supplier";
 import { MenuItem } from "@/types/Menu";
 
-// Mock API modules
 jest.mock("@/lib/api/inventory", () => ({
   getInventoryItemsApi: jest.fn(),
   saveInventoryItemApi: jest.fn(),
@@ -44,6 +44,10 @@ jest.mock("@/lib/api/suppliers", () => ({
   getSuppliersApi: jest.fn(),
   saveSupplierApi: jest.fn(),
   deleteSupplierApi: jest.fn(),
+}));
+
+jest.mock("@/lib/api/notifications", () => ({
+  createNotificationApi: jest.fn(),
 }));
 
 const mockedGetInventory = getInventoryItemsApi as jest.MockedFunction<
@@ -79,6 +83,31 @@ const mockedDeleteSupplier = deleteSupplierApi as jest.MockedFunction<
   typeof deleteSupplierApi
 >;
 
+const mockedCreateNotification = createNotificationApi as jest.MockedFunction<
+  typeof createNotificationApi
+>;
+
+// Helpers to build paginated API responses
+const mockInvResponse = (items: InventoryItem[] = []) => ({
+  items,
+  total: items.length,
+  totalAll: items.length,
+  statusCounts: { "at-par": items.length, low: 0, out: 0 },
+  supplierCounts: {},
+});
+
+const mockSupResponse = (suppliers: Supplier[] = []) => ({
+  suppliers,
+  total: suppliers.length,
+  totalAll: suppliers.length,
+});
+
+const mockMenuResponse = (menu: MenuItem[] = []) => ({
+  menu,
+  total: menu.length,
+  totalAll: menu.length,
+});
+
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <InventoryProvider>{children}</InventoryProvider>
 );
@@ -96,6 +125,9 @@ describe("getStatus helper", () => {
 describe("InventoryContext & Provider", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedGetInventory.mockResolvedValue(mockInvResponse());
+    mockedGetSuppliers.mockResolvedValue(mockSupResponse());
+    mockedGetMenu.mockResolvedValue(mockMenuResponse());
   });
 
   test("throws error when useInventory is used outside InventoryProvider", () => {
@@ -109,13 +141,15 @@ describe("InventoryContext & Provider", () => {
   });
 
   test("loads all inventory, menu, and supplier data successfully", async () => {
-    const mockItems = [{ id: "i1", name: "Flour", onHand: 10, lowAt: 2 }] as InventoryItem[];
+    const mockItems = [
+      { id: "i1", name: "Flour", onHand: 10, lowAt: 2 },
+    ] as InventoryItem[];
     const mockMenu = [{ id: "m1", name: "Burger" }] as MenuItem[];
     const mockSuppliers = [{ id: "s1", name: "Sysco" }] as Supplier[];
 
-    mockedGetInventory.mockResolvedValueOnce(mockItems);
-    mockedGetMenu.mockResolvedValueOnce(mockMenu);
-    mockedGetSuppliers.mockResolvedValueOnce(mockSuppliers);
+    mockedGetInventory.mockResolvedValueOnce(mockInvResponse(mockItems));
+    mockedGetMenu.mockResolvedValueOnce(mockMenuResponse(mockMenu));
+    mockedGetSuppliers.mockResolvedValueOnce(mockSupResponse(mockSuppliers));
 
     const { result } = renderHook(() => useInventory(), { wrapper });
 
@@ -125,15 +159,46 @@ describe("InventoryContext & Provider", () => {
 
     expect(result.current.loading).toBe(false);
     expect(result.current.items).toEqual(mockItems);
+    expect(result.current.allItems).toEqual(mockItems);
     expect(result.current.menuItems).toEqual(mockMenu);
     expect(result.current.suppliers).toEqual(mockSuppliers);
+    expect(result.current.allSuppliers).toEqual(mockSuppliers);
+  });
+
+  test("loads paginated slices via loadItemsPage, loadSuppliersPage, and loadMenuPage", async () => {
+    const mockItems = [
+      { id: "i1", name: "Flour", onHand: 10, lowAt: 2 },
+    ] as InventoryItem[];
+    const mockSuppliers = [{ id: "s1", name: "Sysco" }] as Supplier[];
+    const mockMenu = [{ id: "m1", name: "Burger" }] as MenuItem[];
+
+    mockedGetInventory.mockResolvedValueOnce(mockInvResponse(mockItems));
+    mockedGetSuppliers.mockResolvedValueOnce(mockSupResponse(mockSuppliers));
+    mockedGetMenu.mockResolvedValueOnce(mockMenuResponse(mockMenu));
+
+    const { result } = renderHook(() => useInventory(), { wrapper });
+
+    await act(async () => {
+      await result.current.loadItemsPage({ page: 2, pageSize: 5 });
+      await result.current.loadSuppliersPage({ page: 1, pageSize: 20 });
+      await result.current.loadMenuPage({ page: 3, pageSize: 10 });
+    });
+
+    expect(mockedGetInventory).toHaveBeenCalledWith({ page: 2, pageSize: 5 });
+    expect(result.current.items).toEqual(mockItems);
+
+    expect(mockedGetSuppliers).toHaveBeenCalledWith({ page: 1, pageSize: 20 });
+    expect(result.current.suppliers).toEqual(mockSuppliers);
+
+    expect(mockedGetMenu).toHaveBeenCalledWith({ page: 3, pageSize: 10 });
+    expect(result.current.menuItems).toEqual(mockMenu);
   });
 
   describe("Inventory Item CRUD", () => {
-    test("adds, updates, and removes an inventory item", async () => {
+    test("adds, updates, and removes an inventory item and triggers notifications", async () => {
       const input = { name: "Tomatoes", onHand: 20, lowAt: 5 } as ItemInput;
       const savedItem = { id: "i1", ...input } as InventoryItem;
-      const updatedItem = { ...savedItem, onHand: 15 } as InventoryItem;
+      const updatedItem = { ...savedItem, onHand: 3 } as InventoryItem; // "low" status
 
       mockedSaveInventory
         .mockResolvedValueOnce(savedItem)
@@ -142,25 +207,38 @@ describe("InventoryContext & Provider", () => {
 
       const { result } = renderHook(() => useInventory(), { wrapper });
 
-      // Add
+      // Add (at-par)
+      mockedGetInventory.mockResolvedValue(mockInvResponse([savedItem]));
       await act(async () => {
         await result.current.addItem(input);
       });
       expect(mockedSaveInventory).toHaveBeenCalledWith(input);
       expect(result.current.items).toEqual([savedItem]);
+      expect(mockedCreateNotification).toHaveBeenCalledWith({
+        type: "inventory_alert",
+        message: "New inventory item added: Tomatoes",
+        title: "Inventory Update",
+      });
 
-      // Update
+      // Update (low stock)
+      mockedGetInventory.mockResolvedValue(mockInvResponse([updatedItem]));
       await act(async () => {
-        await result.current.updateItem("i1", { ...input, onHand: 15 });
+        await result.current.updateItem("i1", { ...input, onHand: 3 });
       });
       expect(mockedSaveInventory).toHaveBeenCalledWith({
         ...input,
-        onHand: 15,
+        onHand: 3,
         id: "i1",
       });
       expect(result.current.items).toEqual([updatedItem]);
+      expect(mockedCreateNotification).toHaveBeenCalledWith({
+        type: "inventory_alert",
+        message: "Inventory item updated: Tomatoes is now Low",
+        title: "Inventory Alert",
+      });
 
       // Remove
+      mockedGetInventory.mockResolvedValue(mockInvResponse([]));
       await act(async () => {
         await result.current.removeItem("i1");
       });
@@ -183,12 +261,14 @@ describe("InventoryContext & Provider", () => {
       const { result } = renderHook(() => useInventory(), { wrapper });
 
       // Add
+      mockedGetSuppliers.mockResolvedValue(mockSupResponse([savedSupplier]));
       await act(async () => {
         await result.current.addSupplier(input);
       });
       expect(result.current.suppliers).toEqual([savedSupplier]);
 
       // Update
+      mockedGetSuppliers.mockResolvedValue(mockSupResponse([updatedSupplier]));
       await act(async () => {
         await result.current.updateSupplier("s1", { name: "Organic Farms" });
       });
@@ -199,6 +279,7 @@ describe("InventoryContext & Provider", () => {
       expect(result.current.suppliers).toEqual([updatedSupplier]);
 
       // Remove
+      mockedGetSuppliers.mockResolvedValue(mockSupResponse([]));
       await act(async () => {
         await result.current.removeSupplier("s1");
       });
@@ -219,12 +300,14 @@ describe("InventoryContext & Provider", () => {
       const { result } = renderHook(() => useInventory(), { wrapper });
 
       // Add
+      mockedGetMenu.mockResolvedValue(mockMenuResponse([menuItem]));
       await act(async () => {
         await result.current.addMenuItem(menuItem);
       });
       expect(result.current.menuItems).toEqual([menuItem]);
 
       // Update
+      mockedGetMenu.mockResolvedValue(mockMenuResponse([updatedMenu]));
       await act(async () => {
         await result.current.updateMenuItem("m1", updatedMenu);
       });
@@ -232,6 +315,7 @@ describe("InventoryContext & Provider", () => {
       expect(result.current.menuItems).toEqual([updatedMenu]);
 
       // Remove
+      mockedGetMenu.mockResolvedValue(mockMenuResponse([]));
       await act(async () => {
         await result.current.removeMenuItem("m1");
       });

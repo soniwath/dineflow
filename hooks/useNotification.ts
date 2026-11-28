@@ -2,9 +2,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
-  getNotifications,
-  markNotificationAsRead,
-  markAllNotificationsAsRead,
+  getNotificationsApi,
+  markNotificationAsReadApi,
+  markAllNotificationsAsReadApi,
 } from "@/lib/api/notifications";
 import type { Notification } from "@/types/Notification";
 
@@ -20,7 +20,7 @@ export function useNotifications({
     if (inFlight.current) return; // skip if the last request is still running
     inFlight.current = true;
     try {
-      const data = await getNotifications();
+      const data = await getNotificationsApi();
       setNotifications(data.notifications);
       setUnreadCount(data.unreadCount);
     } catch (err) {
@@ -55,7 +55,7 @@ export function useNotifications({
       );
       setUnreadCount((c) => Math.max(0, c - 1));
       try {
-        await markNotificationAsRead(id);
+        await markNotificationAsReadApi(id);
       } catch (err) {
         console.error(err);
       } finally {
@@ -69,7 +69,7 @@ export function useNotifications({
     setNotifications((prev) => prev.map((n) => ({ ...n, status: "read" })));
     setUnreadCount(0);
     try {
-      await markAllNotificationsAsRead();
+      await markAllNotificationsAsReadApi();
     } catch (err) {
       console.error(err);
     } finally {
@@ -77,5 +77,24 @@ export function useNotifications({
     }
   }, [refresh]);
 
-  return { notifications, unreadCount, markRead, markAllRead, refresh };
+  const loadMoreNotifications = useCallback(async () => {
+    try {
+      const data = await getNotificationsApi({
+        limit: notifications.length + 10,
+      });
+      setNotifications([...data.notifications]);
+      setUnreadCount(data.unreadCount);
+    } catch (err) {
+      console.error("Failed to load more notifications", err);
+    }
+  }, []);
+
+  return {
+    notifications,
+    unreadCount,
+    markRead,
+    markAllRead,
+    refresh,
+    loadMoreNotifications,
+  };
 }

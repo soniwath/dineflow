@@ -1,17 +1,27 @@
 import { Supplier } from "@/types/Supplier";
 
-export async function getSuppliersApi(): Promise<Supplier[]> {
-  const res = await fetch("/api/suppliers", {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-  });
+// In src/lib/api/suppliers.ts
+export type SuppliersQueryParams = {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+};
 
-  if (!res.ok) {
-    throw new Error("Failed to fetch suppliers");
-  }
+export async function getSuppliersApi(params?: SuppliersQueryParams) {
+  const sp = new URLSearchParams();
+  if (params?.page) sp.set("page", String(params.page));
+  if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+  if (params?.q) sp.set("q", params.q);
 
+  const qs = sp.toString();
+  const res = await fetch(`/api/suppliers${qs ? `?${qs}` : ""}`);
   const data = await res.json();
-  return data.suppliers || [];
+  if (!res.ok) throw new Error(data.message ?? "Failed to fetch suppliers");
+  return {
+    suppliers: (data.suppliers ?? data.items ?? []) as Supplier[],
+    total: (data.total ?? 0) as number,
+    totalAll: (data.totalAll ?? 0) as number,
+  };
 }
 
 export async function saveSupplierApi(

@@ -24,6 +24,14 @@ const TYPE_META: Record<
     icon: AlertTriangle,
     className: "bg-amber-500/15 text-amber-600",
   },
+  low_stock_alert: {
+    icon: AlertTriangle,
+    className: "bg-amber-500/15 text-amber-600",
+  },
+  out_of_stock_alert: {
+    icon: AlertTriangle,
+    className: "bg-rose-500/15 text-rose-600",
+  },
 };
 
 function timeAgo(iso: string) {
@@ -43,11 +51,16 @@ function timeAgo(iso: string) {
 
 export default function NotificationBell() {
   const { user } = useAuth();
-  const { notifications, unreadCount, markRead, markAllRead } =
-    useNotifications({
-      intervalMs: 5000,
-      enabled: !!user && user.role !== "guest",
-    });
+  const {
+    notifications,
+    unreadCount,
+    markRead,
+    markAllRead,
+    loadMoreNotifications,
+  } = useNotifications({
+    intervalMs: 5000,
+    enabled: !!user && user.role !== "guest",
+  });
 
   return (
     <Popover>
@@ -69,7 +82,10 @@ export default function NotificationBell() {
         )}
       </PopoverTrigger>
 
-      <PopoverContent align="end" className="w-80 p-0">
+      <PopoverContent
+        align="end"
+        className="w-120 max-h-96 p-0 overflow-y-auto"
+      >
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h3 className="text-sm font-medium">Notifications</h3>
           {unreadCount > 0 && (
@@ -123,6 +139,12 @@ export default function NotificationBell() {
               );
             })
           )}
+        </div>
+
+        <div className="border-t px-4 py-3 text-center">
+          <Button size="sm" onClick={loadMoreNotifications}>
+            Load more
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

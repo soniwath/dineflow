@@ -68,12 +68,31 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 
+const MAX_SIZE_B = 5 * 1024 * 1024;
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const PAGE_SIZE = 10;
+const AVAILABLE_CATEGORIES = ["Starters", "Mains", "Desserts", "Beverages"];
+
 export default function InventoryView() {
   const {
     loading: isInventoryLoading,
+    tabLoading,
     items,
     suppliers,
     menuItems,
+    allItems,
+    allSuppliers,
+    itemsTotal,
+    itemsTotalAll,
+    statusCounts,
+    supplierCounts,
+    suppliersTotal,
+    suppliersTotalAll,
+    menuTotal,
+    menuTotalAll,
+    loadItemsPage,
+    loadSuppliersPage,
+    loadMenuPage,
     addItem,
     updateItem,
     removeItem,
@@ -86,23 +105,74 @@ export default function InventoryView() {
     loadData,
   } = useInventory();
 
-  const supplierName = useMemo(
-    () => Object.fromEntries(suppliers.map((s) => [s.id, s.name])),
-    [suppliers],
-  );
-
-  // constants
-  const MAX_SIZE_B = 5 * 1024 * 1024;
-  const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
-  const PAGE_SIZE = 10;
-  const availableCategories = ["Starters", "Mains", "Desserts", "Beverages"];
-
   const [tab, setTab] = useState("items");
   const [view, setView] = useState<"list" | "card">("list");
-  const [query, setQuery] = useState("");
+
+  // Per-tab backend filter & pagination state
+  const [itemsQuery, setItemsQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [supplierFilter, setSupplierFilter] = useState<string[]>([]);
-  const [page, setPage] = useState(1);
+  const [itemsPage, setItemsPage] = useState(1);
+
+  const [suppliersQuery, setSuppliersQuery] = useState("");
+  const [suppliersPage, setSuppliersPage] = useState(1);
+
+  const [menuQuery, setMenuQuery] = useState("");
+  const [menuCategoryFilter, setMenuCategoryFilter] = useState<string[]>([]);
+  const [menuPage, setMenuPage] = useState(1);
+
+  // Lookup maps from full unpaginated lists (so page 2+ items/suppliers still resolve)
+  const supplierName = useMemo(
+    () => Object.fromEntries(allSuppliers.map((s) => [s.id, s.name])),
+    [allSuppliers],
+  );
+
+  const itemById = useMemo(
+    () => Object.fromEntries(allItems.map((i) => [i.id, i])),
+    [allItems],
+  );
+
+  // Initial lookup load (populates allItems & allSuppliers for dropdowns/cross-refs)
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
+
+  // Debounced backend fetching per tab
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadItemsPage({
+        page: itemsPage,
+        pageSize: PAGE_SIZE,
+        q: itemsQuery.trim() || undefined,
+        statuses: statusFilter,
+        supplierIds: supplierFilter,
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [itemsPage, itemsQuery, statusFilter, supplierFilter, loadItemsPage]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadSuppliersPage({
+        page: suppliersPage,
+        pageSize: PAGE_SIZE,
+        q: suppliersQuery.trim() || undefined,
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [suppliersPage, suppliersQuery, loadSuppliersPage]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadMenuPage({
+        page: menuPage,
+        pageSize: PAGE_SIZE,
+        q: menuQuery.trim() || undefined,
+        categories: menuCategoryFilter,
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [menuPage, menuQuery, menuCategoryFilter, loadMenuPage]);
 
   // Inventory Dialog States
   const [formOpen, setFormOpen] = useState(false);
@@ -114,12 +184,15 @@ export default function InventoryView() {
   // Inventory Detail States
   const [itemDetailId, setItemDetailId] = useState<string | null>(null);
   const [itemDetailOpen, setItemDetailOpen] = useState(false);
-  // Derived from the store so the sheet stays fresh after an edit
+
   const itemDetail = useMemo(
-    () => items.find((i) => i.id === itemDetailId) ?? null,
-    [items, itemDetailId],
+    () =>
+      items.find((i) => i.id === itemDetailId) ??
+      allItems.find((i) => i.id === itemDetailId) ??
+      null,
+    [items, allItems, itemDetailId],
   );
-  // Menu items whose recipe uses this ingredient
+
   const usedInMenu = useMemo(
     () =>
       itemDetail
@@ -153,13 +226,13 @@ export default function InventoryView() {
   };
 
   function handleSave(input: ItemInput) {
-    if (editing) updateItem(editing.id, input);
-    else addItem(input);
+    if (editing) void updateItem(editing.id, input);
+    else void addItem(input);
     setFormOpen(false);
   }
 
   function confirmDelete() {
-    if (deleting) removeItem(deleting.id);
+    if (deleting) void removeItem(deleting.id);
     setDeleteOpen(false);
   }
 
@@ -177,6 +250,7 @@ export default function InventoryView() {
 
   const openAddSupplier = () => {
     setEditingSupplier(null);
+    setSupplierErrors({});
     setSupplierNameInput("");
     setSupplierPhoneInput("");
     setSupplierEmailInput("");
@@ -185,6 +259,7 @@ export default function InventoryView() {
 
   const openEditSupplier = (s: Supplier) => {
     setEditingSupplier(s);
+    setSupplierErrors({});
     setSupplierNameInput(s.name);
     setSupplierPhoneInput(s.phone);
     setSupplierEmailInput(s.email);
@@ -208,7 +283,7 @@ export default function InventoryView() {
       const next: SupplierErrors = {};
       for (const issue of result.error.issues) {
         const key = issue.path[0] as keyof SupplierErrors;
-        next[key] ??= issue.message; // keep the first error per field
+        next[key] ??= issue.message;
       }
       setSupplierErrors(next);
       return;
@@ -216,16 +291,16 @@ export default function InventoryView() {
 
     setSupplierErrors({});
     if (editingSupplier) {
-      updateSupplier(editingSupplier.id, result.data);
+      void updateSupplier(editingSupplier.id, result.data);
     } else {
-      addSupplier(result.data);
+      void addSupplier(result.data);
     }
 
     setSupplierFormOpen(false);
   }
 
   function confirmDeleteSupplier() {
-    if (deletingSupplier) removeSupplier(deletingSupplier.id);
+    if (deletingSupplier) void removeSupplier(deletingSupplier.id);
     setSupplierDeleteOpen(false);
   }
 
@@ -244,7 +319,6 @@ export default function InventoryView() {
   const [menuDeleteOpen, setMenuDeleteOpen] = useState(false);
   const [deletingMenu, setDeletingMenu] = useState<MenuItem | null>(null);
 
-  // Preview URL derived from the File, revoked automatically on change/unmount
   const preview = useMemo(
     () => (menuImage ? URL.createObjectURL(menuImage) : null),
     [menuImage],
@@ -252,23 +326,26 @@ export default function InventoryView() {
 
   const openAddMenu = () => {
     setEditingMenu(null);
+    setMenuErrors({});
     setMenuName("");
     setMenuPrice("");
     setMenuCategory("Starters");
     setMenuDesc("");
     setRecipeIngredients([]);
+    setMenuImage(null);
     setMenuFormOpen(true);
   };
 
   const openEditMenu = (m: MenuItem) => {
     setEditingMenu(m);
+    setMenuErrors({});
     setMenuName(m.name);
     setMenuPrice((m.price / 100).toFixed(2));
     setMenuCategory(m.category ?? "Starters");
     setMenuDesc(m.desc ?? "");
     setRecipeIngredients(m.ingredients ?? []);
+    setMenuImage(null);
     setMenuFormOpen(true);
-    setMenuImage(null); // Reset image to null when editing, as we don't have the file object
   };
 
   const openDeleteMenu = (m: MenuItem) => {
@@ -276,7 +353,7 @@ export default function InventoryView() {
     setMenuDeleteOpen(true);
   };
 
-  function handleSaveMenu(e: any) {
+  function handleSaveMenu(e: React.FormEvent) {
     e.preventDefault();
     const result = createMenuSchema().safeParse({
       name: menuName,
@@ -291,9 +368,8 @@ export default function InventoryView() {
       const next: MenuErrors = {};
       for (const issue of result.error.issues) {
         const key = issue.path.join(",") as keyof MenuErrors;
-        next[key] ??= issue.message; // keep the first error per field
+        next[key] ??= issue.message;
       }
-
       setMenuErrors(next);
       return;
     }
@@ -301,23 +377,23 @@ export default function InventoryView() {
     setMenuErrors({});
 
     if (editingMenu) {
-      updateMenuItem(editingMenu.id, { id: editingMenu.id, ...result.data });
+      void updateMenuItem(editingMenu.id, {
+        id: editingMenu.id,
+        ...result.data,
+      });
     } else {
-      addMenuItem({ id: "", ...result.data });
+      void addMenuItem({ id: "", ...result.data });
     }
     setMenuFormOpen(false);
-    handleRemoveImage(); // Remove the image from state after saving
+    handleRemoveImage();
   }
 
   function confirmDeleteMenu() {
-    if (deletingMenu) removeMenuItem(deletingMenu.id);
+    if (deletingMenu) void removeMenuItem(deletingMenu.id);
     setMenuDeleteOpen(false);
   }
 
-  // Loading state
-  const loading = isInventoryLoading;
-
-  // helpers
+  // Helpers
   const qtyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
   const qty = (n: number, unit: string) => `${qtyFmt.format(n)} ${unit}`;
 
@@ -339,75 +415,51 @@ export default function InventoryView() {
     out: "bg-red-500",
   };
 
+  // Global facet counts from backend
   const statusOptions: FilterOption[] = (
     ["at-par", "low", "out"] as StockStatus[]
   ).map((s) => ({
     value: s,
     label: STATUS_LABEL[s],
     dot: statusDot[s],
-    count: items.filter((i) => getStatus(i) === s).length,
+    count: statusCounts[s] ?? 0,
   }));
 
-  const belowPar = items.filter((i) => getStatus(i) !== "at-par").length;
+  const belowPar = (statusCounts.low ?? 0) + (statusCounts.out ?? 0);
 
-  const supplierOptions: FilterOption[] = suppliers.map((s) => ({
+  const supplierOptions: FilterOption[] = allSuppliers.map((s) => ({
     value: s.id,
     label: s.name,
-    count: items.filter((i) => i.supplierId === s.id).length,
+    count: supplierCounts[s.id] ?? 0,
   }));
 
-  const inventoryRows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items
-      .filter((i) => {
-        if (
-          q &&
-          !i.name.toLowerCase().includes(q) &&
-          !supplierName[i.supplierId]?.toLowerCase().includes(q)
-        )
-          return false;
-        if (statusFilter.length && !statusFilter.includes(getStatus(i)))
-          return false;
-        if (supplierFilter.length && !supplierFilter.includes(i.supplierId))
-          return false;
-        return true;
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [items, query, statusFilter, supplierFilter, supplierName]);
+  const categoryOptions: FilterOption[] = AVAILABLE_CATEGORIES.map((c) => ({
+    value: c,
+    label: c,
+    count: menuItems.filter((m) => m.category === c).length,
+  }));
 
-  const menuRows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return menuItems
-      .filter((m) => {
-        if (
-          q &&
-          !m.name.toLowerCase().includes(q) &&
-          !m.category?.toLowerCase().includes(q)
-        )
-          return false;
-        return true;
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [menuItems, query]);
+  const itemFiltersActive =
+    itemsQuery.trim() !== "" ||
+    statusFilter.length > 0 ||
+    supplierFilter.length > 0;
 
-  const filtersActive =
-    query.trim() !== "" || statusFilter.length > 0 || supplierFilter.length > 0;
-  const pageCount = Math.max(1, Math.ceil(inventoryRows.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const pageRows = inventoryRows.slice(start, start + PAGE_SIZE);
+  const supplierFiltersActive = suppliersQuery.trim() !== "";
 
-  const firstPageBtn = Math.max(1, Math.min(currentPage - 2, pageCount - 4));
-  const pageButtons = Array.from(
-    { length: Math.min(5, pageCount) },
-    (_, i) => firstPageBtn + i,
-  );
+  const menuFiltersActive =
+    menuQuery.trim() !== "" || menuCategoryFilter.length > 0;
 
-  function clearFilters() {
-    setQuery("");
+  function clearItemFilters() {
+    setItemsQuery("");
     setStatusFilter([]);
     setSupplierFilter([]);
-    setPage(1);
+    setItemsPage(1);
+  }
+
+  function clearMenuFilters() {
+    setMenuQuery("");
+    setMenuCategoryFilter([]);
+    setMenuPage(1);
   }
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -422,8 +474,6 @@ export default function InventoryView() {
     } else {
       setMenuImage(file);
     }
-
-    // Allows re-selecting the same file after removing it
     input.value = "";
   };
 
@@ -431,18 +481,13 @@ export default function InventoryView() {
     setMenuImage(null);
   };
 
-  // side effects
   useEffect(() => {
     return () => {
       if (preview) URL.revokeObjectURL(preview);
     };
   }, [preview]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  if (loading) {
+  if (isInventoryLoading && allItems.length === 0) {
     return (
       <div className="flex h-96 items-center justify-center gap-2 text-muted-foreground">
         <Loader2 className="size-5 animate-spin" />
@@ -456,7 +501,7 @@ export default function InventoryView() {
       <Tabs
         value={tab}
         onValueChange={(v) => setTab(String(v))}
-        className="space-y-4 "
+        className="space-y-4"
       >
         {/* Tabs + dynamic add button */}
         <div className="flex flex-col lg:flex-row items-end lg:items-center justify-between gap-3">
@@ -467,7 +512,7 @@ export default function InventoryView() {
             >
               Items
               <span className="text-xs tabular-nums text-muted-foreground">
-                {items.length}
+                {itemsTotalAll}
               </span>
             </TabsTrigger>
             <TabsTrigger
@@ -476,7 +521,7 @@ export default function InventoryView() {
             >
               Suppliers
               <span className="text-xs tabular-nums text-muted-foreground">
-                {suppliers.length}
+                {suppliersTotalAll}
               </span>
             </TabsTrigger>
             <TabsTrigger
@@ -485,7 +530,7 @@ export default function InventoryView() {
             >
               Menu Catalog
               <span className="text-xs tabular-nums text-muted-foreground">
-                {menuItems.length}
+                {menuTotalAll}
               </span>
             </TabsTrigger>
           </TabsList>
@@ -522,10 +567,10 @@ export default function InventoryView() {
               <Input
                 placeholder="Search ingredients or suppliers"
                 className="pl-9"
-                value={query}
+                value={itemsQuery}
                 onChange={(e) => {
-                  setQuery(e.target.value);
-                  setPage(1);
+                  setItemsQuery(e.target.value);
+                  setItemsPage(1);
                 }}
               />
             </div>
@@ -536,7 +581,7 @@ export default function InventoryView() {
               selected={statusFilter}
               onChange={(v) => {
                 setStatusFilter(v);
-                setPage(1);
+                setItemsPage(1);
               }}
             />
             <FilterPopoverComponent
@@ -545,18 +590,21 @@ export default function InventoryView() {
               selected={supplierFilter}
               onChange={(v) => {
                 setSupplierFilter(v);
-                setPage(1);
+                setItemsPage(1);
               }}
               searchable
             />
 
-            {filtersActive && (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
+            {itemFiltersActive && (
+              <Button variant="ghost" size="sm" onClick={clearItemFilters}>
                 Clear all
               </Button>
             )}
 
             <div className="ml-auto flex items-center gap-2">
+              {tabLoading && (
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              )}
               {belowPar > 0 && (
                 <Button
                   variant="ghost"
@@ -564,56 +612,33 @@ export default function InventoryView() {
                   className="rounded-full bg-red-500/15 text-red-700 hover:bg-red-500/25"
                   onClick={() => {
                     setStatusFilter(["low", "out"]);
-                    setPage(1);
+                    setItemsPage(1);
                   }}
                 >
                   {belowPar} below par
                 </Button>
               )}
 
-              <div
-                role="group"
-                aria-label="View"
-                className="flex items-center rounded-lg border bg-muted p-0.5"
-              >
-                {(
-                  [
-                    { key: "list", label: "List view", icon: List },
-                    { key: "card", label: "Card view", icon: LayoutGrid },
-                  ] as const
-                ).map(({ key, label, icon: Icon }) => (
-                  <Button
-                    key={key}
-                    variant={view === key ? "default" : "ghost"}
-                    size="icon"
-                    className="size-7"
-                    aria-label={label}
-                    aria-pressed={view === key}
-                    onClick={() => setView(key)}
-                  >
-                    <Icon className="size-4" />
-                  </Button>
-                ))}
-              </div>
+              <ViewToggle view={view} onChange={setView} />
             </div>
           </div>
 
-          {inventoryRows.length === 0 ? (
+          {items.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-10 text-center">
               <div className="space-y-1">
                 <p className="text-sm font-medium">
-                  {filtersActive
+                  {itemFiltersActive
                     ? "No items match your filters"
                     : "No items yet"}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {filtersActive
+                  {itemFiltersActive
                     ? "Try a different search or clear the filters."
                     : "Add your first ingredient to start tracking stock."}
                 </p>
               </div>
-              {filtersActive ? (
-                <Button variant="outline" size="sm" onClick={clearFilters}>
+              {itemFiltersActive ? (
+                <Button variant="outline" size="sm" onClick={clearItemFilters}>
                   Clear filters
                 </Button>
               ) : (
@@ -637,7 +662,7 @@ export default function InventoryView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pageRows.map((item) => (
+                  {items.map((item) => (
                     <TableRow
                       key={item.id}
                       className="cursor-pointer"
@@ -682,7 +707,7 @@ export default function InventoryView() {
             </div>
           ) : (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {pageRows.map((item) => {
+              {items.map((item) => {
                 const status = getStatus(item);
                 return (
                   <article
@@ -753,72 +778,84 @@ export default function InventoryView() {
             </div>
           )}
 
-          {inventoryRows.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-              <span className="tabular-nums">
-                Showing {start + 1}–{start + pageRows.length} of{" "}
-                {inventoryRows.length}
-              </span>
-              {pageCount > 1 && (
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-8"
-                    disabled={currentPage === 1}
-                    onClick={() => setPage(currentPage - 1)}
-                    aria-label="Previous page"
-                  >
-                    ‹
-                  </Button>
-                  {pageButtons.map((p) => (
-                    <Button
-                      key={p}
-                      variant={p === currentPage ? "default" : "outline"}
-                      size="icon"
-                      className="size-8"
-                      onClick={() => setPage(p)}
-                      aria-label={`Page ${p}`}
-                      aria-current={p === currentPage ? "page" : undefined}
-                    >
-                      {p}
-                    </Button>
-                  ))}
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-8"
-                    disabled={currentPage === pageCount}
-                    onClick={() => setPage(currentPage + 1)}
-                    aria-label="Next page"
-                  >
-                    ›
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+          <PaginationFooter
+            page={itemsPage}
+            pageSize={PAGE_SIZE}
+            total={itemsTotal}
+            onPageChange={setItemsPage}
+          />
         </TabsContent>
 
         {/* -------------------------- Suppliers -------------------------- */}
-        <TabsContent value="suppliers" className="mt-0">
+        <TabsContent value="suppliers" className="mt-0 space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full max-w-xs">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search suppliers by name, email, or phone"
+                className="pl-9"
+                value={suppliersQuery}
+                onChange={(e) => {
+                  setSuppliersQuery(e.target.value);
+                  setSuppliersPage(1);
+                }}
+              />
+            </div>
+
+            {supplierFiltersActive && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSuppliersQuery("");
+                  setSuppliersPage(1);
+                }}
+              >
+                Clear search
+              </Button>
+            )}
+
+            {tabLoading && (
+              <Loader2 className="ml-auto size-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
+
           {suppliers.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-10 text-center">
               <div className="space-y-1">
-                <p className="text-sm font-medium">No suppliers yet</p>
+                <p className="text-sm font-medium">
+                  {supplierFiltersActive
+                    ? "No suppliers match your search"
+                    : "No suppliers yet"}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  Add your first supplier to manage your ingredient sources.
+                  {supplierFiltersActive
+                    ? "Try a different keyword or clear the search."
+                    : "Add your first supplier to manage your ingredient sources."}
                 </p>
               </div>
-              <Button size="sm" onClick={openAddSupplier}>
-                <Plus className="size-4" />
-                Add supplier
-              </Button>
+              {supplierFiltersActive ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSuppliersQuery("");
+                    setSuppliersPage(1);
+                  }}
+                >
+                  Clear search
+                </Button>
+              ) : (
+                <Button size="sm" onClick={openAddSupplier}>
+                  <Plus className="size-4" />
+                  Add supplier
+                </Button>
+              )}
             </div>
           ) : (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {suppliers.map((s) => {
-                const theirs = items.filter((i) => i.supplierId === s.id);
+                const theirs = allItems.filter((i) => i.supplierId === s.id);
                 const low = theirs.filter(
                   (i) => getStatus(i) !== "at-par",
                 ).length;
@@ -851,8 +888,8 @@ export default function InventoryView() {
                         onClick={() => {
                           setSupplierFilter([s.id]);
                           setStatusFilter([]);
-                          setQuery("");
-                          setPage(1);
+                          setItemsQuery("");
+                          setItemsPage(1);
                           setTab("items");
                         }}
                       >
@@ -869,6 +906,13 @@ export default function InventoryView() {
               })}
             </div>
           )}
+
+          <PaginationFooter
+            page={suppliersPage}
+            pageSize={PAGE_SIZE}
+            total={suppliersTotal}
+            onPageChange={setSuppliersPage}
+          />
         </TabsContent>
 
         {/* -------------------------- Menu Catalog -------------------------- */}
@@ -879,61 +923,62 @@ export default function InventoryView() {
               <Input
                 placeholder="Search dishes or categories"
                 className="pl-9"
-                value={query}
+                value={menuQuery}
                 onChange={(e) => {
-                  setQuery(e.target.value);
-                  setPage(1);
+                  setMenuQuery(e.target.value);
+                  setMenuPage(1);
                 }}
               />
             </div>
 
-            {filtersActive && (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
+            <FilterPopoverComponent
+              title="Category"
+              options={categoryOptions}
+              selected={menuCategoryFilter}
+              onChange={(v) => {
+                setMenuCategoryFilter(v);
+                setMenuPage(1);
+              }}
+            />
+
+            {menuFiltersActive && (
+              <Button variant="ghost" size="sm" onClick={clearMenuFilters}>
                 Clear all
               </Button>
             )}
 
             <div className="ml-auto flex items-center gap-2">
-              <div
-                role="group"
-                aria-label="View"
-                className="flex items-center rounded-lg border bg-muted p-0.5"
-              >
-                {(
-                  [
-                    { key: "list", label: "List view", icon: List },
-                    { key: "card", label: "Card view", icon: LayoutGrid },
-                  ] as const
-                ).map(({ key, label, icon: Icon }) => (
-                  <Button
-                    key={key}
-                    variant={view === key ? "default" : "ghost"}
-                    size="icon"
-                    className="size-7"
-                    aria-label={label}
-                    aria-pressed={view === key}
-                    onClick={() => setView(key)}
-                  >
-                    <Icon className="size-4" />
-                  </Button>
-                ))}
-              </div>
+              {tabLoading && (
+                <Loader2 className="size-4 animate-spin text-muted-foreground" />
+              )}
+              <ViewToggle view={view} onChange={setView} />
             </div>
           </div>
 
-          {menuRows.length === 0 ? (
+          {menuItems.length === 0 ? (
             <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed p-10 text-center">
               <div className="space-y-1">
-                <p className="text-sm font-medium">No menu items yet</p>
+                <p className="text-sm font-medium">
+                  {menuFiltersActive
+                    ? "No menu items match your filters"
+                    : "No menu items yet"}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  Add your first menu item to configure recipes and stock
-                  deduction.
+                  {menuFiltersActive
+                    ? "Try a different search or clear the filters."
+                    : "Add your first menu item to configure recipes and stock deduction."}
                 </p>
               </div>
-              <Button size="sm" onClick={openAddMenu}>
-                <Plus className="size-4" />
-                Add menu item
-              </Button>
+              {menuFiltersActive ? (
+                <Button variant="outline" size="sm" onClick={clearMenuFilters}>
+                  Clear filters
+                </Button>
+              ) : (
+                <Button size="sm" onClick={openAddMenu}>
+                  <Plus className="size-4" />
+                  Add menu item
+                </Button>
+              )}
             </div>
           ) : view === "list" ? (
             <div className="overflow-hidden rounded-xl border bg-card">
@@ -950,7 +995,7 @@ export default function InventoryView() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {menuRows.map((m) => (
+                  {menuItems.map((m) => (
                     <TableRow key={m.id}>
                       <TableCell className="font-medium">{m.name}</TableCell>
                       <TableCell>{m.category}</TableCell>
@@ -961,9 +1006,7 @@ export default function InventoryView() {
                         <div className="flex flex-wrap gap-1">
                           {m.ingredients && m.ingredients.length > 0 ? (
                             m.ingredients.map((ing, idx) => {
-                              const itemObj = items.find(
-                                (i) => i.id === ing.inventoryItemId,
-                              );
+                              const itemObj = itemById[ing.inventoryItemId];
                               return (
                                 <Badge
                                   key={idx}
@@ -996,70 +1039,71 @@ export default function InventoryView() {
             </div>
           ) : (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {menuItems.map((m) => {
-                return (
-                  <article
-                    key={m.id}
-                    className="flex flex-col gap-4 rounded-xl border bg-card p-4"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="truncate text-sm font-medium">
-                          {m.name}
-                        </h3>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {m.category}
-                        </p>
-                      </div>
-                      <span className="text-base font-semibold tabular-nums">
-                        {money.format(m.price / 100)}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-medium text-muted-foreground">
-                        Recipe Ingredients
+              {menuItems.map((m) => (
+                <article
+                  key={m.id}
+                  className="flex flex-col gap-4 rounded-xl border bg-card p-4"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-sm font-medium">{m.name}</h3>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {m.category}
                       </p>
-                      <div className="flex flex-wrap gap-1 min-h-9">
-                        {m.ingredients && m.ingredients.length > 0 ? (
-                          m.ingredients.map((ing, idx) => {
-                            const itemObj = items.find(
-                              (i) => i.id === ing.inventoryItemId,
-                            );
-                            return (
-                              <Badge
-                                key={idx}
-                                variant="outline"
-                                className="text-xs"
-                              >
-                                {itemObj ? itemObj.name : "Unknown"}:{" "}
-                                {ing.quantityRequired} {itemObj?.unit}
-                              </Badge>
-                            );
-                          })
-                        ) : (
-                          <span className="text-xs text-muted-foreground italic">
-                            No recipe mapped
-                          </span>
-                        )}
-                      </div>
                     </div>
+                    <span className="text-base font-semibold tabular-nums">
+                      {money.format(m.price / 100)}
+                    </span>
+                  </div>
 
-                    <div className="mt-auto border-t pt-3 flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground truncate max-w-37.5">
-                        {m.desc || "No description"}
-                      </span>
-                      <RowActionsComponent
-                        item={m}
-                        onEdit={openEditMenu}
-                        onDelete={openDeleteMenu}
-                      />
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Recipe Ingredients
+                    </p>
+                    <div className="flex flex-wrap gap-1 min-h-9">
+                      {m.ingredients && m.ingredients.length > 0 ? (
+                        m.ingredients.map((ing, idx) => {
+                          const itemObj = itemById[ing.inventoryItemId];
+                          return (
+                            <Badge
+                              key={idx}
+                              variant="outline"
+                              className="text-xs"
+                            >
+                              {itemObj ? itemObj.name : "Unknown"}:{" "}
+                              {ing.quantityRequired} {itemObj?.unit}
+                            </Badge>
+                          );
+                        })
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">
+                          No recipe mapped
+                        </span>
+                      )}
                     </div>
-                  </article>
-                );
-              })}
+                  </div>
+
+                  <div className="mt-auto border-t pt-3 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground truncate max-w-37.5">
+                      {m.desc || "No description"}
+                    </span>
+                    <RowActionsComponent
+                      item={m}
+                      onEdit={openEditMenu}
+                      onDelete={openDeleteMenu}
+                    />
+                  </div>
+                </article>
+              ))}
             </div>
           )}
+
+          <PaginationFooter
+            page={menuPage}
+            pageSize={PAGE_SIZE}
+            total={menuTotal}
+            onPageChange={setMenuPage}
+          />
         </TabsContent>
       </Tabs>
 
@@ -1115,7 +1159,7 @@ export default function InventoryView() {
             </DialogTitle>
             <DialogDescription>
               {editingSupplier
-                ? "Update the supplier's name details."
+                ? "Update the supplier's details."
                 : "Add a new vendor source for your inventory items."}
             </DialogDescription>
           </DialogHeader>
@@ -1140,7 +1184,7 @@ export default function InventoryView() {
               <Input
                 value={supplierPhoneInput}
                 onChange={(e) => setSupplierPhoneInput(e.target.value)}
-                placeholder="e.g. Sysco Foods"
+                placeholder="e.g. (555) 123-4567"
                 aria-invalid={!!supplierErrors.phone}
               />
             </FieldComponent>
@@ -1153,7 +1197,7 @@ export default function InventoryView() {
                 type="email"
                 value={supplierEmailInput}
                 onChange={(e) => setSupplierEmailInput(e.target.value)}
-                placeholder="e.g. Sysco Foods"
+                placeholder="e.g. orders@sysco.com"
                 aria-invalid={!!supplierErrors.email}
               />
             </FieldComponent>
@@ -1226,7 +1270,7 @@ export default function InventoryView() {
               >
                 <Input
                   type="number"
-                  step="1.00"
+                  step="0.01"
                   value={menuPrice}
                   onChange={(e) => setMenuPrice(e.target.value)}
                   placeholder="14.99"
@@ -1248,7 +1292,7 @@ export default function InventoryView() {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableCategories.map((cat) => (
+                  {AVAILABLE_CATEGORIES.map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
                     </SelectItem>
@@ -1289,6 +1333,7 @@ export default function InventoryView() {
                     className="h-40 w-40 rounded object-cover"
                   />
                   <Button
+                    type="button"
                     className="cursor-pointer"
                     variant="destructive"
                     onClick={handleRemoveImage}
@@ -1312,7 +1357,7 @@ export default function InventoryView() {
                     setRecipeIngredients((prev) => [
                       ...prev,
                       {
-                        inventoryItemId: items[0]?.id || "",
+                        inventoryItemId: allItems[0]?.id || "",
                         quantityRequired: 1,
                       },
                     ])
@@ -1330,9 +1375,7 @@ export default function InventoryView() {
               ) : (
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {recipeIngredients.map((rec, index) => {
-                    const selectedInvItem = items.find(
-                      (i) => i.id === rec.inventoryItemId,
-                    );
+                    const selectedInvItem = itemById[rec.inventoryItemId];
                     const invError =
                       menuErrors[`ingredients,${index},inventoryItemId`];
                     const qtyError =
@@ -1361,7 +1404,7 @@ export default function InventoryView() {
                             }}
                             aria-invalid={!!invError}
                           >
-                            {items.map((inv) => (
+                            {allItems.map((inv) => (
                               <option key={inv.id} value={inv.id}>
                                 {inv.name} ({inv.unit})
                               </option>
@@ -1557,6 +1600,114 @@ export default function InventoryView() {
           )}
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function ViewToggle({
+  view,
+  onChange,
+}: {
+  view: "list" | "card";
+  onChange: (next: "list" | "card") => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="View"
+      className="flex items-center rounded-lg border bg-muted p-0.5"
+    >
+      {(
+        [
+          { key: "list", label: "List view", icon: List },
+          { key: "card", label: "Card view", icon: LayoutGrid },
+        ] as const
+      ).map(({ key, label, icon: Icon }) => (
+        <Button
+          key={key}
+          variant={view === key ? "default" : "ghost"}
+          size="icon"
+          className="size-7"
+          aria-label={label}
+          aria-pressed={view === key}
+          onClick={() => onChange(key)}
+        >
+          <Icon className="size-4" />
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function PaginationFooter({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (next: number) => void;
+}) {
+  if (total === 0) return null;
+
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const start = (currentPage - 1) * pageSize;
+  const end = Math.min(start + pageSize, total);
+  const firstBtn = Math.max(1, Math.min(currentPage - 2, pageCount - 4));
+  const buttons = Array.from(
+    { length: Math.min(5, pageCount) },
+    (_, i) => firstBtn + i,
+  );
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+      <span className="tabular-nums">
+        Showing {start + 1}–{end} of {total}
+      </span>
+      {pageCount > 1 && (
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8"
+            disabled={currentPage === 1}
+            onClick={() => onPageChange(currentPage - 1)}
+            aria-label="Previous page"
+          >
+            ‹
+          </Button>
+          {buttons.map((p) => (
+            <Button
+              key={p}
+              variant={p === currentPage ? "default" : "outline"}
+              size="icon"
+              className="size-8"
+              onClick={() => onPageChange(p)}
+              aria-label={`Page ${p}`}
+              aria-current={p === currentPage ? "page" : undefined}
+            >
+              {p}
+            </Button>
+          ))}
+          <Button
+            variant="outline"
+            size="icon"
+            className="size-8"
+            disabled={currentPage === pageCount}
+            onClick={() => onPageChange(currentPage + 1)}
+            aria-label="Next page"
+          >
+            ›
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

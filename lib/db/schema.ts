@@ -341,6 +341,8 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "order_update",
   "reservation_update",
   "inventory_alert",
+  "low_stock_alert",
+  "out_of_stock_alert",
 ]);
 
 export const notificationStatusEnum = pgEnum("notification_status", [

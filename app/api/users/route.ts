@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { or, and, eq, ilike, SQL } from "drizzle-orm";
+import { unstable_cache, revalidateTag } from "next/cache";
+import { or, and, eq, ilike } from "drizzle-orm";
 const bcrypt = require("bcrypt");
 
 import { db } from "@/lib/db/index";
@@ -7,10 +8,56 @@ import { users, userRoles } from "@/lib/db/schema";
 import { CreateUserBody } from "@/types/User";
 import { isAuthenticated } from "@/lib/auth/jwt";
 
+export const USERS_CACHE_TAG = "users";
+
 function sanitizeUser(row: any) {
   const { passwordHash, ...safe } = row;
   return safe;
 }
+
+const getCachedUsers = unstable_cache(
+  async (q?: string, roleId?: string, status?: string) => {
+    const conditions: any = [];
+
+    if (q) {
+      conditions.push(
+        or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)),
+      );
+    }
+
+    if (status) {
+      const isActive = status === "active";
+      conditions.push(eq(users.isActive, isActive));
+    } else {
+      conditions.push(eq(users.isActive, true));
+    }
+
+    if (roleId) {
+      conditions.push(eq(users.roleId, roleId));
+    }
+
+    const rows = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        isActive: users.isActive,
+        lastLoginAt: users.lastLoginAt,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+        role: userRoles.name,
+        roleId: userRoles.id,
+      })
+      .from(users)
+      .leftJoin(userRoles, eq(users.roleId, userRoles.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(users.createdAt);
+
+    return rows.map(sanitizeUser);
+  },
+  ["users-list"],
+  { tags: [USERS_CACHE_TAG], revalidate: 60 },
+);
 
 export async function GET(req: Request) {
   if (!(await isAuthenticated())) {
@@ -21,47 +68,17 @@ export async function GET(req: Request) {
   }
 
   const { searchParams } = new URL(req.url);
-  const params = Object.fromEntries(searchParams.entries());
-  const { q, roleId, status } = params;
+  const q = searchParams.get("q") || undefined;
+  const roleId = searchParams.get("roleId") || undefined;
+  const status = searchParams.get("status") || undefined;
 
-  const conditions: any = [];
+  const data = await getCachedUsers(q, roleId, status);
 
-  if (q) {
-    conditions.push(
-      or(ilike(users.name, `%${q}%`), ilike(users.email, `%${q}%`)),
-    );
-  }
-
-  if (status) {
-    const isActive = status === "active";
-    conditions.push(eq(users.isActive, isActive));
-  } else {
-    conditions.push(eq(users.isActive, true));
-  }
-
-  if (roleId) {
-    conditions.push(eq(users.roleId, roleId));
-  }
-
-  // 2. Execute the query with all active conditions
-  const rows = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      isActive: users.isActive,
-      lastLoginAt: users.lastLoginAt,
-      createdAt: users.createdAt,
-      updatedAt: users.updatedAt,
-      role: userRoles.name,
-      roleId: userRoles.id,
-    })
-    .from(users)
-    .leftJoin(userRoles, eq(users.roleId, userRoles.id))
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(users.createdAt);
-
-  return NextResponse.json(rows.map(sanitizeUser));
+  return NextResponse.json(data, {
+    headers: {
+      "Cache-Control": "no-store, max-age=0",
+    },
+  });
 }
 
 export async function POST(req: Request) {
@@ -96,10 +113,11 @@ export async function POST(req: Request) {
       })
       .returning();
 
+    revalidateTag(USERS_CACHE_TAG, { expire: 0 });
+
     return NextResponse.json(sanitizeUser(inserted[0]), { status: 201 });
   } catch (error: any) {
     console.log(error);
-    // Postgres unique violation
     if (error?.code === "23505") {
       return NextResponse.json(
         { error: "Email already exists" },

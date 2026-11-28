@@ -1,10 +1,29 @@
 import { MenuItem } from "@/types/Menu";
 
-export async function getMenuItemsApi(): Promise<MenuItem[]> {
-  const res = await fetch("/api/menu-items");
+// In src/lib/api/menu.ts
+export type MenuQueryParams = {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  categories?: string[];
+};
+
+export async function getMenuItemsApi(params?: MenuQueryParams) {
+  const sp = new URLSearchParams();
+  if (params?.page) sp.set("page", String(params.page));
+  if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+  if (params?.q) sp.set("q", params.q);
+  params?.categories?.forEach((c) => sp.append("category", c));
+
+  const qs = sp.toString();
+  const res = await fetch(`/api/menu-items${qs ? `?${qs}` : ""}`);
   const data = await res.json();
   if (!res.ok) throw new Error(data.message ?? "Failed to fetch menu items");
-  return data.items;
+  return {
+    menu: (data.menu ?? data.items ?? []) as MenuItem[],
+    total: (data.total ?? 0) as number,
+    totalAll: (data.totalAll ?? 0) as number,
+  };
 }
 
 export async function saveMenuItemApi(item: MenuItem): Promise<MenuItem> {

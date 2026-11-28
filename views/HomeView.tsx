@@ -13,6 +13,8 @@ import { useReservations, todayISO } from "@/stores/ReservationStore";
 import { useOrder } from "@/stores/OrderStore";
 import { useInventory } from "@/stores/InventoryStore";
 
+import { useTodaySales } from "@/hooks/useTodaySales";
+
 import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +69,14 @@ export default function HomeView() {
     loading: inventoryLoading,
     loadData: loadInventory,
   } = useInventory();
+  const {
+    data: salesData,
+    error: salesError,
+    loading: salesLoading,
+  } = useTodaySales();
+
+  const salesToday = salesData?.summary.netSales ?? 0; // adjust field
+  const ordersClosed = salesData?.summary.totalOrders ?? 0;
 
   const loading =
     floorLoading || resLoading || orderLoading || inventoryLoading;
@@ -138,8 +148,20 @@ export default function HomeView() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <HomeStatCardComponent
           label="Sales today"
-          value={money.format(1284)}
-          note="42 orders closed"
+          value={
+            salesError
+              ? "—"
+              : salesLoading
+                ? "…"
+                : money.format(salesToday / 100)
+          }
+          note={
+            salesError
+              ? "Sales unavailable"
+              : salesLoading
+                ? "Loading…"
+                : `${ordersClosed} orders closed`
+          }
         />
         <HomeStatCardComponent
           label="Open orders"

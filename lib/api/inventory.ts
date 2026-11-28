@@ -1,4 +1,20 @@
-import { InventoryItem, ItemInput } from "@/types/Inventory";
+import { InventoryItem, ItemInput, StockStatus } from "@/types/Inventory";
+
+export type InventoryQueryParams = {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  statuses?: string[];
+  supplierIds?: string[];
+};
+
+export type InventoryPageResponse = {
+  items: InventoryItem[];
+  total: number;
+  totalAll: number;
+  statusCounts: Record<StockStatus, number>;
+  supplierCounts: Record<string, number>;
+};
 
 function mapApiInventoryItem(item: InventoryItem): InventoryItem {
   return {
@@ -8,11 +24,31 @@ function mapApiInventoryItem(item: InventoryItem): InventoryItem {
   };
 }
 
-export async function getInventoryItemsApi() {
-  const res = await fetch("/api/inventory-items");
+export async function getInventoryItemsApi(
+  params?: InventoryQueryParams,
+): Promise<InventoryPageResponse> {
+  const sp = new URLSearchParams();
+  if (params?.page) sp.set("page", String(params.page));
+  if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+  if (params?.q) sp.set("q", params.q);
+  params?.statuses?.forEach((s) => sp.append("status", s));
+  params?.supplierIds?.forEach((id) => sp.append("supplierId", id));
+
+  const qs = sp.toString();
+  const res = await fetch(`/api/inventory-items${qs ? `?${qs}` : ""}`, {
+    method: "GET",
+    cache: "no-store", // Ensure we always get the latest data
+  });
   const data = await res.json();
   if (!res.ok) throw new Error(data.message ?? "Failed to fetch inventory");
-  return data.items.map(mapApiInventoryItem);
+
+  return {
+    items: (data.items ?? []).map(mapApiInventoryItem),
+    total: data.total ?? data.items?.length ?? 0,
+    totalAll: data.totalAll ?? data.items?.length ?? 0,
+    statusCounts: data.statusCounts ?? { "at-par": 0, low: 0, out: 0 },
+    supplierCounts: data.supplierCounts ?? {},
+  };
 }
 
 export async function saveInventoryItemApi(input: ItemInput & { id?: string }) {
