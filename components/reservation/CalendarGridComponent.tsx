@@ -1,5 +1,6 @@
 import { Reservation, ReservationStatus } from "@/types/Reservation";
-import { addDays, formatDate, formatTime } from "@/stores/ReservationStore";
+import { addDays } from "@/stores/ReservationStore";
+import { formatDate, formatTime } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 export default function CalendarGridComponent({

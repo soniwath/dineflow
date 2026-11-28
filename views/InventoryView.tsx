@@ -14,6 +14,7 @@ import { STATUS_LABEL, getStatus, useInventory } from "@/stores/InventoryStore";
 import { createSupplierSchema } from "@/lib/validation/supplier";
 import { createMenuSchema } from "@/lib/validation/menu";
 
+import InventorySkeleton from "@/components/inventory/InventorySkeleton";
 import StockBarComponent from "@/components/inventory/StockBarComponent";
 import ExpiryCellComponent from "@/components/inventory/ExpiryCellComponent";
 import RowActionsComponent from "@/components/inventory/RowActionsComponent";
@@ -488,12 +489,7 @@ export default function InventoryView() {
   }, [preview]);
 
   if (isInventoryLoading && allItems.length === 0) {
-    return (
-      <div className="flex h-96 items-center justify-center gap-2 text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-        <span>Loading inventory...</span>
-      </div>
-    );
+    return <InventorySkeleton />;
   }
 
   return (
@@ -1607,7 +1603,6 @@ export default function InventoryView() {
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
-
 function ViewToggle({
   view,
   onChange,

@@ -39,7 +39,7 @@ const OrderContext = createContext<OrderContextValue | null>(null);
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [menuList, setMenuList] = useState<MenuItem[]>([]);
   const [tickets, setTickets] = useState<Tickets>({});
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<SavedOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
 

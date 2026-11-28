@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { useOrder } from "@/stores/OrderStore";
 import type { KitchenTicket } from "@/types/KitchenTicket";
 import CancelOrderDialog from "@/components/kitchen/CancelOrderDialog";
+import KitchenSkeleton from "@/components/kitchen/KitchenSkeleton";
 
 const columns = [
   {
@@ -57,7 +58,8 @@ export default function KitchenView() {
   } = useOrder();
   const [savingId, setSavingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [cancellingTicket, setCancellingTicket] = useState<KitchenTicket | null>(null);
+  const [cancellingTicket, setCancellingTicket] =
+    useState<KitchenTicket | null>(null);
   const [notice, setNotice] = useState("");
   // A shared clock updates every card without creating a timer per ticket.
   const [now, setNow] = useState<number | null>(null);
@@ -115,6 +117,10 @@ export default function KitchenView() {
 
   const openCount = tickets.length;
 
+  if (loading) {
+    return <KitchenSkeleton />;
+  }
+
   return (
     <section className="min-h-[calc(100dvh-6rem)] space-y-6 rounded-xl bg-background p-4 text-foreground sm:p-6">
       <header className="flex items-center justify-between gap-4">
@@ -127,17 +133,21 @@ export default function KitchenView() {
         <Button
           type="button"
           variant="outline"
-          disabled={loading || savingId !== null}
+          disabled={savingId !== null}
           onClick={() => {
             setActionError(null);
             void loadData();
           }}
         >
-          {loading ? "Loading orders…" : "Refresh orders"}
+          Refresh orders
         </Button>
       </header>
 
-      {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
+      {notice && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {notice}
+        </p>
+      )}
 
       {(actionError || error) && (
         <p role="alert" className="text-sm text-destructive">
@@ -239,7 +249,7 @@ export default function KitchenView() {
                       <Button
                         type="button"
                         variant="outline"
-                        disabled={loading || savingId !== null}
+                        disabled={savingId !== null}
                         aria-label={
                           column.actionLabel +
                           " for table " +
@@ -257,23 +267,28 @@ export default function KitchenView() {
                       {ticket.status === "pending" && (
                         <div className="space-y-2">
                           <Button
-                            type="button" variant="destructive" className="w-full"
-                            disabled={loading || savingId !== null || !ticket.canCancel}
+                            type="button"
+                            variant="destructive"
+                            className="w-full"
+                            disabled={savingId !== null || !ticket.canCancel}
                             aria-label={`Cancel order for table ${ticket.tableNumber}`}
                             onClick={() => setCancellingTicket(ticket)}
                           >
                             Cancel order
                           </Button>
-                          {!ticket.canCancel && ticket.cancellationBlockReason && (
-                            <p className="text-xs text-muted-foreground">{ticket.cancellationBlockReason}</p>
-                          )}
+                          {!ticket.canCancel &&
+                            ticket.cancellationBlockReason && (
+                              <p className="text-xs text-muted-foreground">
+                                {ticket.cancellationBlockReason}
+                              </p>
+                            )}
                         </div>
                       )}
                     </article>
                   );
                 })}
 
-                {columnTickets.length === 0 && !loading && !error && (
+                {columnTickets.length === 0 && !error && (
                   <p className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground dark:border-[#26323a] dark:text-[#687b87]">
                     No {column.title.toLowerCase()} tickets
                   </p>

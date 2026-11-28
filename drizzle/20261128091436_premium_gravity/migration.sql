@@ -1,0 +1,1 @@
+ALTER TYPE "notification_type" ADD VALUE 'order_cancelled' BEFORE 'reservation_update';

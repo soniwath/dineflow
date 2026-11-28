@@ -1,0 +1,2 @@
+ALTER TYPE "notification_type" ADD VALUE 'reservation_cancelled' BEFORE 'inventory_alert';--> statement-breakpoint
+ALTER TYPE "notification_type" ADD VALUE 'reservation_no_show' BEFORE 'inventory_alert';

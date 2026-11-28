@@ -339,7 +339,9 @@ export const reservations = pgTable("reservations", {
 /* ------------------------------------------------------------------ */
 export const notificationTypeEnum = pgEnum("notification_type", [
   "order_update",
+  "order_cancelled",
   "reservation_update",
+  "reservation_cancelled",
   "inventory_alert",
   "low_stock_alert",
   "out_of_stock_alert",

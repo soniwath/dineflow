@@ -1,6 +1,6 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { cn, formatDate, formatTime } from "@/lib/utils";
 import {
   FilterOption,
   UserStatus,
@@ -19,6 +19,7 @@ import {
 } from "@/stores/UserStore";
 import { createUserSchema } from "@/lib/validation/user";
 
+import UserManagementSkeleton from "@/components/user/UserManagementSkeleton";
 import FilterPopoverComponent from "@/components/user/FilterPopoverComponent";
 import UserActionsComponent from "@/components/user/UserActionsComponent";
 import UserFormComponent from "@/components/user/UserFormComponent";
@@ -45,7 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutGrid, List, Plus, Search, Loader2 } from "lucide-react";
+import { LayoutGrid, List, Plus, Search } from "lucide-react";
 
 export default function UserManagementView() {
   const {
@@ -223,7 +224,7 @@ export default function UserManagementView() {
       }
 
       setFormOpen(false);
-      await loadData(params);
+      await loadData(params, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save user");
     } finally {
@@ -239,7 +240,7 @@ export default function UserManagementView() {
       await removeUser(deleting.id);
       setDeleteOpen(false);
       setDeleting(null);
-      await loadData(params);
+      await loadData(params, true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete user");
     } finally {
@@ -254,22 +255,46 @@ export default function UserManagementView() {
     setPage(1);
   };
 
+  const formatDateTime = (iso: string | null) => {
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+
+    return `${formatDate(date.toISOString().split("T")[0])} ${formatTime(
+      date.toTimeString().split(" ")[0].slice(0, 5),
+    )}`;
+  };
+
+  const onFirstLoad = useRef(true);
+
   // side effects
   useEffect(() => {
+    if (onFirstLoad.current) {
+      onFirstLoad.current = false;
+      return;
+    }
+
+    if (
+      params.q === undefined &&
+      params.status === undefined &&
+      params.role === undefined
+    ) {
+      return;
+    }
+
     const timer = setTimeout(() => {
-      loadData(params);
+      loadData(params, true);
     }, 300);
 
     return () => clearTimeout(timer);
   }, [query, statusFilter, roleFilter]);
 
+  useEffect(() => {
+    loadData(params);
+  }, []);
+
   if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center gap-2 text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-        <span>Loading users...</span>
-      </div>
-    );
+    return <UserManagementSkeleton />;
   }
 
   return (
@@ -484,7 +509,9 @@ export default function UserManagementView() {
                           statusBadge={statusBadge}
                         />
                       </TableCell>
-                      <TableCell>{user.lastLoginAt ?? "N/A"}</TableCell>
+                      <TableCell>
+                        {formatDateTime(user.lastLoginAt) ?? "N/A"}
+                      </TableCell>
                       <TableCell>
                         <UserActionsComponent
                           user={user}

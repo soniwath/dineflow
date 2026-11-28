@@ -67,7 +67,7 @@ type UserContextValue = {
   users: User[];
   userRoles: UserRole[];
   loading: boolean;
-  loadData: (params?: any) => Promise<void>;
+  loadData: (params?: any, isSilent?: boolean) => Promise<void>;
   addUser: (input: CreateUserBody) => Promise<User>;
   updateUserRecord: (id: string, input: UpdateUserBody) => Promise<User>;
   removeUser: (id: string) => Promise<void>;
@@ -78,22 +78,28 @@ const UserContext = createContext<UserContextValue | null>(null);
 export function UserProvider({ children }: { children: ReactNode }) {
   const [users, setUsers] = useState<User[]>([]);
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const loadData = useCallback(async (params?: any) => {
-    setLoading(true);
-    try {
-      const users = await getUsers(params);
-      setUsers(users);
-
-      const roles = await getUserRoles();
-      setUserRoles(roles);
-    } catch (error) {
-      console.error("Failed to fetch users:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loadData = useCallback(
+    async (params?: any, isSilent: boolean = false) => {
+      if (!isSilent) {
+        setLoading(true);
+      }
+      try {
+        const [fetchedUsers, roles] = await Promise.all([
+          getUsers(params),
+          getUserRoles(),
+        ]);
+        setUsers(fetchedUsers);
+        setUserRoles(roles);
+      } catch (error) {
+        console.error("Failed to fetch users:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [],
+  );
 
   const addUser = useCallback(async (input: CreateUserBody): Promise<User> => {
     const saved = await createUser(input);
@@ -125,7 +131,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
       updateUserRecord,
       removeUser,
     }),
-    [users, loading, loadData, addUser, updateUserRecord, removeUser],
+    [
+      users,
+      userRoles,
+      loading,
+      loadData,
+      addUser,
+      updateUserRecord,
+      removeUser,
+    ],
   );
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;

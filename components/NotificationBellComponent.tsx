@@ -16,9 +16,17 @@ const TYPE_META: Record<
   { icon: typeof Bell; className: string }
 > = {
   order_update: { icon: Package, className: "bg-cyan-500/15 text-cyan-600" },
+  order_cancelled: {
+    icon: Package,
+    className: "bg-rose-500/15 text-rose-600",
+  },
   reservation_update: {
     icon: CalendarClock,
     className: "bg-violet-500/15 text-violet-600",
+  },
+  reservation_cancelled: {
+    icon: CalendarClock,
+    className: "bg-rose-500/15 text-rose-600",
   },
   inventory_alert: {
     icon: AlertTriangle,

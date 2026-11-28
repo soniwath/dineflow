@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { db } from "@/lib/db/index";
 import { users, userRoles } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
@@ -6,6 +7,7 @@ const bcrypt = require("bcrypt");
 import { cookies } from "next/headers";
 import { signToken } from "@/lib/auth/jwt";
 import { RateLimiterMemory } from "rate-limiter-flexible";
+import { USERS_CACHE_TAG } from "@/app/api/users/route";
 
 const loginLimiter = new RateLimiterMemory({
   points: 5, // 5 attempts
@@ -96,6 +98,16 @@ export async function POST(request: Request) {
 
     // 5. Return safe user profile
     const { passwordHash: _, ...safeUser } = user;
+
+    // 6. Update last login timestamp
+    await db
+      .update(users)
+      .set({ lastLoginAt: new Date().toISOString() })
+      .where(eq(users.id, user.id));
+
+    // Revalidate the user profile cache
+    revalidateTag(USERS_CACHE_TAG, { expire: 0 });
+    revalidateTag(`user-${user.id}`, { expire: 0 });
 
     return NextResponse.json({
       success: true,

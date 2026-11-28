@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
+import SchedulingSkeleton from "@/components/scheduling/SchedulingSkeleton";
 import AttendancePanel from "@/components/scheduling/AttendancePanel";
 import ShiftForm from "@/components/scheduling/ShiftForm";
 import { Button } from "@/components/ui/button";
@@ -202,12 +203,12 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
     }
   }
 
+  if (loading) {
+    return <SchedulingSkeleton />;
+  }
+
   return (
-    <section
-      className="min-w-0 space-y-5"
-      aria-labelledby="scheduling-heading"
-      aria-busy={loading}
-    >
+    <section className="min-w-0 space-y-5" aria-labelledby="scheduling-heading">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
           <h1 id="scheduling-heading" className="text-2xl font-semibold">
@@ -224,7 +225,7 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
             type="button"
             variant="outline"
             aria-label="Refresh schedule"
-            disabled={loading || busy}
+            disabled={busy}
             onClick={() => {
               setAttendanceError(null);
               setRefreshCount((count) => count + 1);
@@ -236,9 +237,7 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
           {canManageSchedule && (
             <Button
               type="button"
-              disabled={
-                loading || busy || Boolean(error) || activeStaff.length === 0
-              }
+              disabled={busy || Boolean(error) || activeStaff.length === 0}
               onClick={() => {
                 const person = activeStaff[0];
                 if (person)
@@ -374,19 +373,15 @@ export default function SchedulingView({ initialNow }: { initialNow: string }) {
                 </tr>
               </thead>
               <tbody>
-                {(loading || error || staff.length === 0) && (
+                {(error || staff.length === 0) && (
                   <tr>
                     <td
                       colSpan={8}
                       className="p-8 text-center text-muted-foreground"
                     >
-                      {loading ? (
-                        <span role="status">Loading schedule…</span>
-                      ) : error ? (
-                        "Schedule unavailable. Refresh to try again."
-                      ) : (
-                        "No staff members found."
-                      )}
+                      {error
+                        ? "Schedule unavailable. Refresh to try again."
+                        : "No staff members found."}
                     </td>
                   </tr>
                 )}

@@ -10,7 +10,9 @@ export type Notification = {
 
 export type NotificationType =
   | "order_update"
+  | "order_cancelled"
   | "reservation_update"
+  | "reservation_cancelled"
   | "inventory_alert"
   | "low_stock_alert"
   | "out_of_stock_alert";

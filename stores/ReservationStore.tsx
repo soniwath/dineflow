@@ -18,6 +18,7 @@ import {
   updateReservationApi,
 } from "@/lib/api/reservations";
 import { createNotificationApi } from "@/lib/api/notifications";
+import { formatDate, formatTime } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
 /* Types & Helpers                                                     */
@@ -44,22 +45,6 @@ export const todayISO = () => toISO(new Date());
 export function addDays(iso: string, n: number) {
   const [y, m, d] = iso.split("-").map(Number);
   return toISO(new Date(y, m - 1, d + n));
-}
-
-export function formatDate(iso: string) {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-export function formatTime(hhmm: string) {
-  const [h, m] = hhmm.split(":").map(Number);
-  const suffix = h >= 12 ? "PM" : "AM";
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
 const toMinutes = (hhmm: string) => {
@@ -300,7 +285,7 @@ export function ReservationProvider({ children }: { children: ReactNode }) {
         )} at ${formatTime(current.time)} has been ${
           reason === "cancelled" ? "cancelled" : "marked as no-show"
         }.`,
-        type: "reservation_update",
+        type: "reservation_cancelled",
       });
     } catch (error) {
       console.error("Failed to cancel reservation:", error);

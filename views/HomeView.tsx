@@ -12,10 +12,10 @@ import { useFloor } from "@/stores/FloorStore";
 import { useReservations, todayISO } from "@/stores/ReservationStore";
 import { useOrder } from "@/stores/OrderStore";
 import { useInventory } from "@/stores/InventoryStore";
-
 import { useTodaySales } from "@/hooks/useTodaySales";
 
-import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
+import HomeSkeleton from "@/components/HomeSkeleton";
+import { ArrowRight, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -79,7 +79,11 @@ export default function HomeView() {
   const ordersClosed = salesData?.summary.totalOrders ?? 0;
 
   const loading =
-    floorLoading || resLoading || orderLoading || inventoryLoading;
+    floorLoading ||
+    resLoading ||
+    orderLoading ||
+    inventoryLoading ||
+    salesLoading;
 
   const kitchenQueue = {
     pending: kitchenTickets.filter((ticket) => ticket.status === "pending"),
@@ -120,12 +124,7 @@ export default function HomeView() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex h-96 items-center justify-center gap-2 text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-        <span>Loading dashboard...</span>
-      </div>
-    );
+    return <HomeSkeleton />;
   }
 
   return (
@@ -148,19 +147,9 @@ export default function HomeView() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <HomeStatCardComponent
           label="Sales today"
-          value={
-            salesError
-              ? "—"
-              : salesLoading
-                ? "…"
-                : money.format(salesToday / 100)
-          }
+          value={money.format(salesToday / 100)}
           note={
-            salesError
-              ? "Sales unavailable"
-              : salesLoading
-                ? "Loading…"
-                : `${ordersClosed} orders closed`
+            salesError ? "Sales unavailable" : `${ordersClosed} orders closed`
           }
         />
         <HomeStatCardComponent

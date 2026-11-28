@@ -1,11 +1,8 @@
 import { useState } from "react";
 import Link from "next/link";
 
-import {
-  useReservations,
-  formatDate,
-  addDays,
-} from "@/stores/ReservationStore";
+import { useReservations, addDays } from "@/stores/ReservationStore";
+import { formatDate } from "@/lib/utils";
 import {
   Reservation,
   ReservationInput,
@@ -27,10 +24,8 @@ import CalendarGridComponent from "@/components/reservation/CalendarGridComponen
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
