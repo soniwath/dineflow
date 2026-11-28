@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { verifyToken } from "@/lib/auth/jwt";
 import { db } from "@/lib/db/index";
-import { users } from "@/lib/db/schema";
+import { users, userRoles } from "@/lib/db/schema";
 
 export class SchedulingAccessError extends Error {
   constructor(
@@ -28,7 +28,7 @@ export async function requireSchedulingUser() {
   const [user] = await db
     .select({
       id: users.id,
-      role: users.role,
+      roleId: users.roleId,
       isActive: users.isActive,
     })
     .from(users)
@@ -44,7 +44,17 @@ export async function requireSchedulingUser() {
 
 export async function requireSchedulingManager() {
   const user = await requireSchedulingUser();
-  if (user.role !== "manager" && user.role !== "owner") {
+
+  // Get user role
+  const [userRole] = await db
+    .select()
+    .from(userRoles)
+    .where(eq(userRoles.id, String(user.roleId)))
+    .limit(1);
+
+  const roleName = userRole?.name ?? "";
+
+  if (roleName !== "Manager" && roleName !== "Owner") {
     throw new SchedulingAccessError(
       403,
       "Only managers and owners can manage scheduling",

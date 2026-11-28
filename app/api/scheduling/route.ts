@@ -9,7 +9,10 @@ export async function GET(request: Request) {
   try {
     const user = await requireSchedulingUser();
     const weekStart = new URL(request.url).searchParams.get("weekStart");
-    const data = await getStaffSchedule(weekStart, { id: user.id, role: user.role });
+    const data = await getStaffSchedule(weekStart, {
+      id: user.id,
+      roleId: user.roleId,
+    });
     return NextResponse.json(data, {
       headers: { "Cache-Control": "no-store" },
     });

@@ -1,15 +1,7 @@
-export type StaffRole =
-  | "staff"
-  | "server"
-  | "host"
-  | "kitchen"
-  | "manager"
-  | "owner";
-
 export type StaffMember = {
   id: string;
   name: string;
-  role: StaffRole;
+  roleId: string;
   isActive?: boolean;
 };
 
