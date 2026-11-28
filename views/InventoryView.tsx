@@ -77,7 +77,7 @@ const AVAILABLE_CATEGORIES = ["Starters", "Mains", "Desserts", "Beverages"];
 export default function InventoryView() {
   const {
     loading: isInventoryLoading,
-    tabLoading,
+    tabLoading: isTabLoading,
     items,
     suppliers,
     menuItems,
@@ -105,6 +105,8 @@ export default function InventoryView() {
     removeMenuItem,
     loadData,
   } = useInventory();
+
+  const loading = isInventoryLoading || isTabLoading;
 
   const [tab, setTab] = useState("items");
   const [view, setView] = useState<"list" | "card">("list");
@@ -488,7 +490,7 @@ export default function InventoryView() {
     };
   }, [preview]);
 
-  if (isInventoryLoading && allItems.length === 0) {
+  if (loading) {
     return <InventorySkeleton />;
   }
 
@@ -598,9 +600,6 @@ export default function InventoryView() {
             )}
 
             <div className="ml-auto flex items-center gap-2">
-              {tabLoading && (
-                <Loader2 className="size-4 animate-spin text-muted-foreground" />
-              )}
               {belowPar > 0 && (
                 <Button
                   variant="ghost"
@@ -810,10 +809,6 @@ export default function InventoryView() {
                 Clear search
               </Button>
             )}
-
-            {tabLoading && (
-              <Loader2 className="ml-auto size-4 animate-spin text-muted-foreground" />
-            )}
           </div>
 
           {suppliers.length === 0 ? (
@@ -944,9 +939,6 @@ export default function InventoryView() {
             )}
 
             <div className="ml-auto flex items-center gap-2">
-              {tabLoading && (
-                <Loader2 className="size-4 animate-spin text-muted-foreground" />
-              )}
               <ViewToggle view={view} onChange={setView} />
             </div>
           </div>

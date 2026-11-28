@@ -121,8 +121,8 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
   const [menuTotal, setMenuTotal] = useState(0);
   const [menuTotalAll, setMenuTotalAll] = useState(0);
 
-  const [loading, setLoading] = useState(false);
-  const [tabLoading, setTabLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [tabLoading, setTabLoading] = useState(true);
 
   // Track last query params per resource so mutations refresh the exact active page/filter
   const lastItemsQuery = useRef<InventoryQueryParams>({
